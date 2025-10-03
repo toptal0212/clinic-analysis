@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinic Sales Analysis Tool</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-chart-line"></i>
+                    <h1>Clinic Sales Analysis</h1>
+                </div>
+                <nav class="nav">
+                    <a href="#dashboard" class="nav-link active">Dashboard</a>
+                    <a href="#reports" class="nav-link">Reports</a>
+                    <a href="#analytics" class="nav-link">Analytics</a>
+                    <a href="#settings" class="nav-link">Settings</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <div class="container">
+                <!-- API Connection Modal -->
+                <div class="modal" id="apiModal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Medical Force API接続設定</h2>
+                            <button class="modal-close" id="closeApiModal">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label for="apiKey">API Key:</label>
+                                <input type="password" id="apiKey" placeholder="API Keyを入力してください">
+                            </div>
+                            <div class="form-group">
+                                <label for="dateRange">データ取得期間:</label>
+                                <div class="date-range">
+                                    <input type="date" id="startDate">
+                                    <span>〜</span>
+                                    <input type="date" id="endDate">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="useCsvImport">
+                                    CSVファイルインポートを使用する
+                                </label>
+                            </div>
+                            <div class="csv-upload" id="csvUpload" style="display: none;">
+                                <label for="patientCsv">来院者情報CSV:</label>
+                                <input type="file" id="patientCsv" accept=".csv">
+                                <label for="accountingCsv">会計情報CSV:</label>
+                                <input type="file" id="accountingCsv" accept=".csv">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" id="cancelApi">キャンセル</button>
+                            <button class="btn btn-primary" id="connectApi">接続</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="tab-btn active" data-tab="sales-overview">売上表</button>
+                    <button class="tab-btn" data-tab="clinic-comparison">院別売上</button>
+                    <button class="tab-btn" data-tab="patient-analysis">来院者分析</button>
+                    <button class="tab-btn" data-tab="goal-tracking">目標達成率</button>
+                    <button class="tab-btn" data-tab="repeat-analysis">リピート率</button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Sales Overview Tab -->
+                    <div class="tab-panel active" id="sales-overview">
+                        <!-- Date Range Selector -->
+                        <div class="date-selector">
+                            <label>集計期間:</label>
+                            <select id="salesPeriod">
+                                <option value="today">今日</option>
+                                <option value="week">今週</option>
+                                <option value="month" selected>今月</option>
+                                <option value="quarter">今四半期</option>
+                                <option value="year">今年</option>
+                                <option value="custom">カスタム</option>
+                            </select>
+                            <div class="custom-date-range" id="customDateRange" style="display: none;">
+                                <input type="date" id="customStartDate">
+                                <span>〜</span>
+                                <input type="date" id="customEndDate">
+                            </div>
+                        </div>
+
+                        <!-- Revenue Summary Cards -->
+                        <section class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-yen-sign"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>売上合計</h3>
+                                    <p class="stat-value" id="totalRevenue">¥0</p>
+                                    <div class="stat-breakdown">
+                                        <span class="breakdown-item">来院日ベース: <span id="visitBasedRevenue">¥0</span></span>
+                                        <span class="breakdown-item">(会計ベース: <span id="paymentBasedRevenue">¥0</span>)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-user-plus"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>新規患者</h3>
+                                    <p class="stat-value" id="newPatientCount">0</p>
+                                    <div class="stat-breakdown">
+                                        <span class="breakdown-item">当日単価: <span id="newSameDayAverage">¥0</span></span>
+                                        <span class="breakdown-item">新規単価: <span id="newAverage">¥0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-user-check"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>既存患者</h3>
+                                    <p class="stat-value" id="existingPatientCount">0</p>
+                                    <div class="stat-breakdown">
+                                        <span class="breakdown-item">既存単価: <span id="existingAverage">¥0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-tags"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>その他</h3>
+                                    <p class="stat-value" id="otherPatientCount">0</p>
+                                    <div class="stat-breakdown">
+                                        <span class="breakdown-item">売上: <span id="otherRevenue">¥0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Category Breakdown -->
+                        <section class="category-breakdown">
+                            <div class="breakdown-header">
+                                <h2>カテゴリー別売上</h2>
+                                <div class="breakdown-controls">
+                                    <button class="btn btn-outline" id="drillDownBtn">詳細表示</button>
+                                </div>
+                            </div>
+                            <div class="breakdown-grid">
+                                <div class="breakdown-card" data-category="beauty">
+                                    <div class="breakdown-icon">
+                                        <i class="fas fa-heart"></i>
+                                    </div>
+                                    <div class="breakdown-content">
+                                        <h3>美容</h3>
+                                        <p class="breakdown-revenue" id="beautyRevenue">¥0</p>
+                                        <p class="breakdown-count" id="beautyCount">0件</p>
+                                        <div class="breakdown-details">
+                                            <span>外科: <span id="surgeryRevenue">¥0</span></span>
+                                            <span>皮膚科: <span id="dermatologyRevenue">¥0</span></span>
+                                            <span>脱毛: <span id="hairRemovalRevenue">¥0</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="breakdown-card" data-category="other">
+                                    <div class="breakdown-icon">
+                                        <i class="fas fa-tags"></i>
+                                    </div>
+                                    <div class="breakdown-content">
+                                        <h3>その他</h3>
+                                        <p class="breakdown-revenue" id="otherCategoryRevenue">¥0</p>
+                                        <p class="breakdown-count" id="otherCategoryCount">0件</p>
+                                        <div class="breakdown-details">
+                                            <span>ピアス: <span id="piercingRevenue">¥0</span></span>
+                                            <span>物販: <span id="productsRevenue">¥0</span></span>
+                                            <span>麻酔・針・パック: <span id="anesthesiaRevenue">¥0</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Daily Revenue Chart -->
+                        <section class="charts-section">
+                            <div class="chart-container">
+                                <div class="chart-header">
+                                    <h2>日別売上推移</h2>
+                                    <div class="chart-controls">
+                                        <select class="time-filter" id="dailyChartFilter">
+                                            <option value="7d">過去7日</option>
+                                            <option value="30d" selected>過去30日</option>
+                                            <option value="90d">過去90日</option>
+                                            <option value="1y">過去1年</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <canvas id="dailyRevenueChart"></canvas>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Clinic Comparison Tab -->
+                    <div class="tab-panel" id="clinic-comparison">
+                        <div class="clinic-comparison">
+                            <h2>院別売上比較</h2>
+                            <div class="comparison-filters">
+                                <select id="comparisonPeriod">
+                                    <option value="month">月別</option>
+                                    <option value="quarter">四半期別</option>
+                                    <option value="year">年別</option>
+                                </select>
+                                <select id="comparisonYear">
+                                    <option value="2024">2024年</option>
+                                    <option value="2023">2023年</option>
+                                    <option value="2022">2022年</option>
+                                </select>
+                            </div>
+                            <div class="clinic-grid" id="clinicGrid">
+                                <!-- Clinic cards will be generated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Patient Analysis Tab -->
+                    <div class="tab-panel" id="patient-analysis">
+                        <div class="patient-analysis">
+                            <h2>来院者分析</h2>
+                            <div class="analysis-filters">
+                                <select id="analysisPeriod">
+                                    <option value="month">月別</option>
+                                    <option value="quarter">四半期別</option>
+                                    <option value="year">年別</option>
+                                </select>
+                            </div>
+                            <div class="patient-stats-grid">
+                                <div class="patient-stat-card">
+                                    <h3>新規患者</h3>
+                                    <div class="patient-breakdown" id="newPatientBreakdown">
+                                        <!-- Will be populated dynamically -->
+                                    </div>
+                                </div>
+                                <div class="patient-stat-card">
+                                    <h3>既存患者</h3>
+                                    <div class="patient-breakdown" id="existingPatientBreakdown">
+                                        <!-- Will be populated dynamically -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Goal Tracking Tab -->
+                    <div class="tab-panel" id="goal-tracking">
+                        <div class="goal-tracking">
+                            <h2>目標達成率</h2>
+                            <div class="goal-settings">
+                                <button class="btn btn-primary" id="setGoalsBtn">目標設定</button>
+                            </div>
+                            <div class="goal-progress-grid" id="goalProgressGrid">
+                                <!-- Goal progress cards will be generated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Repeat Rate Analysis Tab -->
+                    <div class="tab-panel" id="repeat-analysis">
+                        <div class="repeat-analysis">
+                            <h2>リピート率分析</h2>
+                            <div class="repeat-stats">
+                                <div class="repeat-stat-card">
+                                    <h3>6ヶ月リピート率</h3>
+                                    <p class="repeat-rate" id="sixMonthRate">0%</p>
+                                </div>
+                                <div class="repeat-stat-card">
+                                    <h3>12ヶ月リピート率</h3>
+                                    <p class="repeat-rate" id="twelveMonthRate">0%</p>
+                                </div>
+                            </div>
+                            <div class="repeat-chart">
+                                <canvas id="repeatRateChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
