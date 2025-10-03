@@ -135,9 +135,9 @@ export default function PatientDetails() {
 
   const uniqueValues = useMemo(() => {
     return {
-      staff: [...new Set(patientsWithDetails.map(p => p.staff))],
-      referralSources: [...new Set(patientsWithDetails.map(p => p.referralSource))],
-      treatmentCategories: [...new Set(patientsWithDetails.map(p => p.treatmentHierarchy.main))]
+      staff: Array.from(new Set(patientsWithDetails.map(p => p.staff))),
+      referralSources: Array.from(new Set(patientsWithDetails.map(p => p.referralSource))),
+      treatmentCategories: Array.from(new Set(patientsWithDetails.map(p => p.treatmentHierarchy.main)))
     }
   }, [patientsWithDetails])
 
@@ -216,18 +216,18 @@ export default function PatientDetails() {
   return (
     <div className="space-y-6">
       {/* 検索・フィルター */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex flex-col lg:flex-row gap-4">
+      <div className="p-6 bg-white rounded-lg shadow">
+        <div className="flex flex-col gap-4 lg:flex-row">
           {/* 検索 */}
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute w-4 h-4 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
               <input
                 type="text"
                 placeholder="患者名、患者コード、施術内容、担当者で検索..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function PatientDetails() {
             <select
               value={selectedFilters.patientType}
               onChange={(e) => setSelectedFilters(prev => ({ ...prev, patientType: e.target.value }))}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">患者区分</option>
               <option value="新規">新規</option>
@@ -248,7 +248,7 @@ export default function PatientDetails() {
             <select
               value={selectedFilters.treatmentCategory}
               onChange={(e) => setSelectedFilters(prev => ({ ...prev, treatmentCategory: e.target.value }))}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">施術カテゴリー</option>
               <option value="美容">美容</option>
@@ -258,7 +258,7 @@ export default function PatientDetails() {
             <select
               value={selectedFilters.staff}
               onChange={(e) => setSelectedFilters(prev => ({ ...prev, staff: e.target.value }))}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">担当者</option>
               {uniqueValues.staff.map(staff => (
@@ -269,7 +269,7 @@ export default function PatientDetails() {
             <select
               value={selectedFilters.referralSource}
               onChange={(e) => setSelectedFilters(prev => ({ ...prev, referralSource: e.target.value }))}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">流入元</option>
               {uniqueValues.referralSources.map(source => (
@@ -292,25 +292,25 @@ export default function PatientDetails() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   患者情報
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   来院日
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   施術内容
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   担当者
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   流入元
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   金額
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   操作
                 </th>
               </tr>
@@ -325,7 +325,7 @@ export default function PatientDetails() {
                     <tr className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <User className="h-5 w-5 text-gray-400 mr-3" />
+                          <User className="w-5 h-5 mr-3 text-gray-400" />
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {isEditing ? (
@@ -333,7 +333,7 @@ export default function PatientDetails() {
                                   type="text"
                                   value={editForm.name || ''}
                                   onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                  className="px-2 py-1 text-sm border border-gray-300 rounded"
                                 />
                               ) : (
                                 patient.name
@@ -350,9 +350,9 @@ export default function PatientDetails() {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
                         <div className="flex items-center">
-                          <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                          <Calendar className="w-4 h-4 mr-2 text-gray-400" />
                           {formatDate(patient.visitDate)}
                         </div>
                         <div className="text-xs text-gray-500">
@@ -377,7 +377,7 @@ export default function PatientDetails() {
                           <select
                             value={editForm.staff || ''}
                             onChange={(e) => setEditForm(prev => ({ ...prev, staff: e.target.value }))}
-                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
                           >
                             {uniqueValues.staff.map(staff => (
                               <option key={staff} value={staff}>{staff}</option>
@@ -393,7 +393,7 @@ export default function PatientDetails() {
                           <select
                             value={editForm.referralSource || ''}
                             onChange={(e) => setEditForm(prev => ({ ...prev, referralSource: e.target.value }))}
-                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
                           >
                             {uniqueValues.referralSources.map(source => (
                               <option key={source} value={source}>{source}</option>
@@ -409,7 +409,7 @@ export default function PatientDetails() {
 
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
+                          <DollarSign className="w-4 h-4 mr-1 text-gray-400" />
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {formatCurrency(patient.totalAmount)}
@@ -424,7 +424,7 @@ export default function PatientDetails() {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
                         <div className="flex items-center space-x-2">
                           {isEditing ? (
                             <>
@@ -432,13 +432,13 @@ export default function PatientDetails() {
                                 onClick={handleSave}
                                 className="text-green-600 hover:text-green-900"
                               >
-                                <Save className="h-4 w-4" />
+                                <Save className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={handleCancel}
                                 className="text-red-600 hover:text-red-900"
                               >
-                                <X className="h-4 w-4" />
+                                <X className="w-4 h-4" />
                               </button>
                             </>
                           ) : (
@@ -447,13 +447,13 @@ export default function PatientDetails() {
                                 onClick={() => handleEdit(patient)}
                                 className="text-blue-600 hover:text-blue-900"
                               >
-                                <Edit3 className="h-4 w-4" />
+                                <Edit3 className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => toggleDetails(patient.id)}
                                 className="text-gray-600 hover:text-gray-900"
                               >
-                                {isExpanded ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                               </button>
                             </>
                           )}
@@ -465,10 +465,10 @@ export default function PatientDetails() {
                     {isExpanded && (
                       <tr>
                         <td colSpan={7} className="px-6 py-4 bg-gray-50">
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                             {/* 患者詳細情報 */}
                             <div>
-                              <h4 className="font-semibold text-gray-900 mb-3">患者詳細情報</h4>
+                              <h4 className="mb-3 font-semibold text-gray-900">患者詳細情報</h4>
                               <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">患者コード:</span>
@@ -501,10 +501,10 @@ export default function PatientDetails() {
 
                             {/* 会計詳細 */}
                             <div>
-                              <h4 className="font-semibold text-gray-900 mb-3">会計詳細</h4>
+                              <h4 className="mb-3 font-semibold text-gray-900">会計詳細</h4>
                               <div className="space-y-2">
                                 {patient.accounting.map((account, index) => (
-                                  <div key={index} className="flex justify-between items-center p-2 bg-white rounded border">
+                                  <div key={index} className="flex items-center justify-between p-2 bg-white border rounded">
                                     <div>
                                       <div className="text-sm font-medium">{account.treatmentType}</div>
                                       <div className="text-xs text-gray-500">
@@ -517,10 +517,10 @@ export default function PatientDetails() {
                                     </div>
                                   </div>
                                 ))}
-                                <div className="border-t pt-2 mt-2">
-                                  <div className="flex justify-between items-center">
+                                <div className="pt-2 mt-2 border-t">
+                                  <div className="flex items-center justify-between">
                                     <span className="font-semibold">合計金額:</span>
-                                    <span className="font-bold text-lg">
+                                    <span className="text-lg font-bold">
                                       {formatCurrency(patient.totalAmount)}
                                     </span>
                                   </div>

@@ -71,7 +71,7 @@ export default function ServicesAnalysis() {
 
   // Get unique categories
   const categories = useMemo(() => {
-    const uniqueCategories = [...new Set(services.map(service => service.category))]
+    const uniqueCategories = Array.from(new Set(services.map(service => service.category)))
     return uniqueCategories
   }, [services])
 
@@ -135,10 +135,10 @@ export default function ServicesAnalysis() {
 
   if (services.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">役務データがありません</h3>
+      <div className="p-6 bg-white rounded-lg shadow">
+        <div className="py-12 text-center">
+          <Package className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+          <h3 className="mb-2 text-lg font-medium text-gray-900">役務データがありません</h3>
           <p className="text-gray-500">指定された期間に更新された役務が見つかりませんでした。</p>
         </div>
       </div>
@@ -148,8 +148,8 @@ export default function ServicesAnalysis() {
   return (
     <div className="space-y-6">
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center">
             <div className="p-2 bg-blue-100 rounded-lg">
               <Package className="w-6 h-6 text-blue-600" />
@@ -161,7 +161,7 @@ export default function ServicesAnalysis() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-lg">
               <Activity className="w-6 h-6 text-green-600" />
@@ -173,7 +173,7 @@ export default function ServicesAnalysis() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center">
             <div className="p-2 bg-yellow-100 rounded-lg">
               <DollarSign className="w-6 h-6 text-yellow-600" />
@@ -185,7 +185,7 @@ export default function ServicesAnalysis() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center">
             <div className="p-2 bg-purple-100 rounded-lg">
               <Clock className="w-6 h-6 text-purple-600" />
@@ -199,17 +199,17 @@ export default function ServicesAnalysis() {
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="p-6 bg-white rounded-lg shadow">
+        <div className="flex flex-col gap-4 md:flex-row">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute w-4 h-4 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
               <input
                 type="text"
                 placeholder="役務名で検索..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -248,7 +248,7 @@ export default function ServicesAnalysis() {
       </div>
 
       {/* Services Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">役務一覧</h3>
           <p className="text-sm text-gray-500">{filteredServices.length}件の役務が見つかりました</p>
@@ -258,22 +258,22 @@ export default function ServicesAnalysis() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   役務名
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   カテゴリ
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   価格
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   時間
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   更新日
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   ステータス
                 </th>
               </tr>
@@ -295,13 +295,13 @@ export default function ServicesAnalysis() {
                       <span className="ml-2 text-sm text-gray-900">{service.category}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
                     {formatPrice(service.price)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
                     {formatDuration(service.duration_minutes)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                     {formatDate(service.updated_at)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

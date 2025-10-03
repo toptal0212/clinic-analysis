@@ -209,6 +209,7 @@ export interface ClinicData {
   newAverage: number
   existingAverage: number
   dailyAverage: number
+  monthlyData: any[]
 }
 
 export interface StaffGoal {

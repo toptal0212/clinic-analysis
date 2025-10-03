@@ -99,8 +99,7 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
         newAverage: monthlyMetrics.newAverage,
         existingAverage: monthlyMetrics.existingAverage,
         dailyAverage: monthlyMetrics.dailyAverage,
-        beautyRevenue: beautyPatients.reduce((sum, p) => sum + p.totalAmount, 0),
-        otherRevenue: otherPatients.reduce((sum, p) => sum + p.sameDayAmount, 0)
+        beautyRevenue: beautyPatients.reduce((sum, p) => sum + p.totalAmount, 0)
       }
 
       clinics[clinicId].monthlyData.push(monthlyData)
@@ -219,7 +218,7 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
 
   if (clinicData.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="p-6 bg-white rounded-lg shadow">
         <div className="text-center text-gray-500">
           データがありません
         </div>
@@ -230,16 +229,16 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
   return (
     <div className="space-y-6">
       {/* フィルター */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="p-6 bg-white rounded-lg shadow">
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block mb-1 text-sm font-medium text-gray-700">
               表示指標
             </label>
             <select
               value={selectedMetric}
               onChange={(e) => setSelectedMetric(e.target.value as any)}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="revenue">売上</option>
               <option value="count">件数</option>
@@ -248,13 +247,13 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block mb-1 text-sm font-medium text-gray-700">
               カテゴリー
             </label>
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value as any)}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">全体</option>
               <option value="beauty">美容</option>
@@ -265,8 +264,8 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
       </div>
 
       {/* クリニック比較 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">
           {getCategoryLabel(selectedCategory)} - {getMetricLabel(selectedMetric)} 比較
         </h3>
 
@@ -278,13 +277,13 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
             <div key={clinic.id} className="mb-6">
               <button
                 onClick={() => toggleClinic(clinic.id)}
-                className="flex items-center justify-between w-full p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex items-center justify-between w-full p-4 transition-colors rounded-lg bg-gray-50 hover:bg-gray-100"
               >
                 <div className="flex items-center space-x-3">
                   {isExpanded ? (
-                    <ChevronDown className="h-5 w-5 text-gray-500" />
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gray-500" />
+                    <ChevronRight className="w-5 h-5 text-gray-500" />
                   )}
                   <span className="text-lg font-semibold text-gray-900">{clinic.name}</span>
                 </div>
@@ -306,9 +305,9 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
               {isExpanded && (
                 <div className="mt-4 space-y-4">
                   {/* 詳細メトリクス */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="text-center p-4 bg-blue-50 rounded-lg">
-                      <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="p-4 text-center rounded-lg bg-blue-50">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-blue-600" />
                       <div className="text-lg font-bold text-blue-900">
                         {formatNumber(clinic.newCount)}
                       </div>
@@ -318,8 +317,8 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
                       </div>
                     </div>
 
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                      <Users className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                    <div className="p-4 text-center rounded-lg bg-green-50">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-green-600" />
                       <div className="text-lg font-bold text-green-900">
                         {formatNumber(clinic.existingCount)}
                       </div>
@@ -329,8 +328,8 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
                       </div>
                     </div>
 
-                    <div className="text-center p-4 bg-gray-50 rounded-lg">
-                      <Users className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+                    <div className="p-4 text-center rounded-lg bg-gray-50">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-gray-600" />
                       <div className="text-lg font-bold text-gray-900">
                         {formatNumber(clinic.otherCount)}
                       </div>
@@ -340,8 +339,8 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
                       </div>
                     </div>
 
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                      <DollarSign className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                    <div className="p-4 text-center rounded-lg bg-purple-50">
+                      <DollarSign className="w-8 h-8 mx-auto mb-2 text-purple-600" />
                       <div className="text-lg font-bold text-purple-900">
                         {formatCurrency(clinic.dailyAverage)}
                       </div>
@@ -351,7 +350,7 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
 
                   {/* 月別推移チャート */}
                   <div className="mt-6">
-                    <h4 className="font-semibold text-gray-900 mb-3">月別推移</h4>
+                    <h4 className="mb-3 font-semibold text-gray-900">月別推移</h4>
                     <div className="overflow-x-auto">
                       <div className="flex space-x-2 min-w-max">
                         {clinic.monthlyData.slice(-24).map((monthData, index) => {
@@ -365,7 +364,7 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
                               <div className="w-8 bg-blue-200 rounded-t" style={{ height: `${height}px` }}>
                                 <div className="w-full h-full bg-blue-500 rounded-t"></div>
                               </div>
-                              <div className="text-xs text-gray-600 text-center">
+                              <div className="text-xs text-center text-gray-600">
                                 {formatDate(monthData.date)}
                               </div>
                               <div className="text-xs font-medium text-gray-900">
@@ -385,12 +384,12 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
 
                   {/* ドリルダウン分析 */}
                   <div className="mt-6">
-                    <h4 className="font-semibold text-gray-900 mb-3">ドリルダウン分析</h4>
+                    <h4 className="mb-3 font-semibold text-gray-900">ドリルダウン分析</h4>
                     
                     {/* 美容カテゴリーの詳細 */}
-                    <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                      <h5 className="font-medium text-blue-900 mb-3">美容カテゴリー</h5>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 mb-4 rounded-lg bg-blue-50">
+                      <h5 className="mb-3 font-medium text-blue-900">美容カテゴリー</h5>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div className="text-center">
                           <div className="text-lg font-bold text-blue-900">外科</div>
                           <div className="text-sm text-blue-700">
@@ -413,9 +412,9 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
                     </div>
 
                     {/* その他カテゴリーの詳細 */}
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h5 className="font-medium text-gray-900 mb-3">その他カテゴリー</h5>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-lg bg-gray-50">
+                      <h5 className="mb-3 font-medium text-gray-900">その他カテゴリー</h5>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div className="text-center">
                           <div className="text-lg font-bold text-gray-900">ピアス</div>
                           <div className="text-sm text-gray-700">

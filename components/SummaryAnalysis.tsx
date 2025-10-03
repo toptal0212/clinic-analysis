@@ -135,7 +135,7 @@ export default function SummaryAnalysis() {
     }
 
     // 施術データを階層化（簡易分類）
-    Object.entries(treatmentSummary).forEach(([treatment, data]) => {
+    Object.entries(treatmentSummary).forEach(([treatment, data]: [string, any]) => {
       let mainCategory = 'その他'
       let subCategory = 'その他'
       let procedure = treatment
@@ -222,7 +222,7 @@ export default function SummaryAnalysis() {
         <div className="text-center text-gray-500">
           <h3 className="mb-2 text-lg font-semibold text-gray-900">本日のサマリー分析</h3>
           <p>本日のデータがありません</p>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="mt-1 text-sm text-gray-400">
             {new Date().toLocaleDateString('ja-JP', { 
               year: 'numeric', 
               month: 'long', 
@@ -238,7 +238,7 @@ export default function SummaryAnalysis() {
   return (
     <div className="space-y-6">
       {/* 本日のサマリー分析ヘッダー */}
-      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
         <h2 className="text-xl font-semibold text-blue-900">本日のサマリー分析</h2>
         <p className="text-blue-700">
           {new Date().toLocaleDateString('ja-JP', { 
@@ -351,9 +351,9 @@ export default function SummaryAnalysis() {
         <h3 className="mb-4 text-lg font-semibold text-gray-900">流入元別サマリー</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(summaryData.referralSourceSummary)
-            .sort(([,a], [,b]) => b.revenue - a.revenue)
+            .sort(([,a], [,b]) => (b as any).revenue - (a as any).revenue)
             .slice(0, 9)
-            .map(([source, data]) => (
+            .map(([source, data]: [string, any]) => (
             <div key={source} className="p-4 border rounded-lg">
               <div className="text-sm font-medium text-gray-600">{source}</div>
               <div className="mt-2 text-2xl font-bold text-gray-900">
@@ -378,9 +378,9 @@ export default function SummaryAnalysis() {
         <h3 className="mb-4 text-lg font-semibold text-gray-900">施術別サマリー</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(summaryData.treatmentSummary)
-            .sort(([,a], [,b]) => b.revenue - a.revenue)
+            .sort(([,a], [,b]) => (b as any).revenue - (a as any).revenue)
             .slice(0, 9)
-            .map(([treatment, data]) => (
+            .map(([treatment, data]: [string, any]) => (
             <div key={treatment} className="p-4 border rounded-lg">
               <div className="text-sm font-medium text-gray-600">{treatment}</div>
               <div className="mt-2 text-2xl font-bold text-gray-900">
