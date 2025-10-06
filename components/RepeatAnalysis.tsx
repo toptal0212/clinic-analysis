@@ -79,7 +79,7 @@ export default function RepeatAnalysisComponent() {
 
   if (!repeatAnalysis) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="p-6 bg-white rounded-lg shadow">
         <div className="text-center text-gray-500">
           データがありません
         </div>
@@ -90,10 +90,10 @@ export default function RepeatAnalysisComponent() {
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="p-6 bg-white rounded-lg shadow">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <RefreshCw className="h-8 w-8 text-blue-600" />
+            <RefreshCw className="w-8 h-8 text-blue-600" />
             <div>
               <h2 className="text-2xl font-bold text-gray-900">リピート率分析</h2>
               <p className="text-sm text-gray-600">顧客満足度を測り、長期的な関係構築に繋げる</p>
@@ -103,7 +103,7 @@ export default function RepeatAnalysisComponent() {
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value as '6months' | '12months')}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="6months">6ヶ月以内</option>
               <option value="12months">12ヶ月以内</option>
@@ -113,8 +113,8 @@ export default function RepeatAnalysisComponent() {
       </div>
 
       {/* リピート率サマリー */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">総患者数</p>
@@ -122,11 +122,11 @@ export default function RepeatAnalysisComponent() {
                 {formatNumber(repeatAnalysis.totalPatients)}
               </p>
             </div>
-            <Users className="h-8 w-8 text-blue-600" />
+            <Users className="w-8 h-8 text-blue-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">リピート患者数</p>
@@ -134,11 +134,11 @@ export default function RepeatAnalysisComponent() {
                 {formatNumber(repeatAnalysis.repeatPatients)}
               </p>
             </div>
-            <RefreshCw className="h-8 w-8 text-green-600" />
+            <RefreshCw className="w-8 h-8 text-green-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">リピート率</p>
@@ -146,11 +146,11 @@ export default function RepeatAnalysisComponent() {
                 {repeatAnalysis.repeatRate.toFixed(1)}%
               </p>
             </div>
-            <Target className="h-8 w-8 text-purple-600" />
+            <Target className="w-8 h-8 text-purple-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="p-6 bg-white rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">平均再来院期間</p>
@@ -158,16 +158,16 @@ export default function RepeatAnalysisComponent() {
                 {formatDays(repeatAnalysis.averageDaysToRepeat)}
               </p>
             </div>
-            <Clock className="h-8 w-8 text-orange-600" />
+            <Clock className="w-8 h-8 text-orange-600" />
           </div>
         </div>
       </div>
 
       {/* リピート率詳細 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">リピート率詳細</h3>
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">リピート率詳細</h3>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* リピート率プログレスバー */}
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -179,7 +179,7 @@ export default function RepeatAnalysisComponent() {
               </span>
             </div>
             
-            <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
+            <div className="w-full h-4 mb-4 bg-gray-200 rounded-full">
               <div
                 className={`h-4 rounded-full transition-all duration-500 ${getRepeatRateBarColor(repeatAnalysis.repeatRate)}`}
                 style={{ width: `${Math.min(repeatAnalysis.repeatRate, 100)}%` }}
@@ -201,11 +201,11 @@ export default function RepeatAnalysisComponent() {
             <div className={`mt-4 p-3 rounded-lg ${getRepeatRateBgColor(repeatAnalysis.repeatRate)}`}>
               <div className="flex items-center space-x-2">
                 {repeatAnalysis.repeatRate >= 70 ? (
-                  <TrendingUp className="h-5 w-5 text-green-600" />
+                  <TrendingUp className="w-5 h-5 text-green-600" />
                 ) : repeatAnalysis.repeatRate >= 50 ? (
-                  <BarChart3 className="h-5 w-5 text-yellow-600" />
+                  <BarChart3 className="w-5 h-5 text-yellow-600" />
                 ) : (
-                  <Target className="h-5 w-5 text-red-600" />
+                  <Target className="w-5 h-5 text-red-600" />
                 )}
                 <span className={`font-medium ${getRepeatRateColor(repeatAnalysis.repeatRate)}`}>
                   {repeatAnalysis.repeatRate >= 70 ? '優秀' : 
@@ -217,10 +217,10 @@ export default function RepeatAnalysisComponent() {
 
           {/* 再来院期間分析 */}
           <div>
-            <h4 className="text-md font-semibold text-gray-900 mb-4">再来院期間分析</h4>
+            <h4 className="mb-4 font-semibold text-gray-900 text-md">再来院期間分析</h4>
             
             <div className="space-y-4">
-              <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="p-4 rounded-lg bg-gray-50">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700">平均再来院期間</span>
                   <span className="text-lg font-bold text-gray-900">
@@ -232,7 +232,7 @@ export default function RepeatAnalysisComponent() {
                 </div>
               </div>
 
-              <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="p-4 rounded-lg bg-blue-50">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-blue-700">リピート売上</span>
                   <span className="text-lg font-bold text-blue-900">
@@ -244,7 +244,7 @@ export default function RepeatAnalysisComponent() {
                 </div>
               </div>
 
-              <div className="p-4 bg-green-50 rounded-lg">
+              <div className="p-4 rounded-lg bg-green-50">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-green-700">平均リピート売上</span>
                   <span className="text-lg font-bold text-green-900">
@@ -261,14 +261,14 @@ export default function RepeatAnalysisComponent() {
       </div>
 
       {/* 改善提案 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">改善提案</h3>
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">改善提案</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {repeatAnalysis.repeatRate < 50 && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <h4 className="font-semibold text-red-900 mb-2">緊急改善が必要</h4>
-              <ul className="text-sm text-red-700 space-y-1">
+            <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+              <h4 className="mb-2 font-semibold text-red-900">緊急改善が必要</h4>
+              <ul className="space-y-1 text-sm text-red-700">
                 <li>• 顧客満足度調査の実施</li>
                 <li>• フォローアップ体制の強化</li>
                 <li>• 施術品質の見直し</li>
@@ -278,9 +278,9 @@ export default function RepeatAnalysisComponent() {
           )}
 
           {repeatAnalysis.repeatRate >= 50 && repeatAnalysis.repeatRate < 70 && (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <h4 className="font-semibold text-yellow-900 mb-2">改善の余地あり</h4>
-              <ul className="text-sm text-yellow-700 space-y-1">
+            <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+              <h4 className="mb-2 font-semibold text-yellow-900">改善の余地あり</h4>
+              <ul className="space-y-1 text-sm text-yellow-700">
                 <li>• リピート率向上施策の検討</li>
                 <li>• 顧客コミュニケーションの強化</li>
                 <li>• メンテナンスプランの提案</li>
@@ -290,9 +290,9 @@ export default function RepeatAnalysisComponent() {
           )}
 
           {repeatAnalysis.repeatRate >= 70 && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h4 className="font-semibold text-green-900 mb-2">優秀な成果</h4>
-              <ul className="text-sm text-green-700 space-y-1">
+            <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+              <h4 className="mb-2 font-semibold text-green-900">優秀な成果</h4>
+              <ul className="space-y-1 text-sm text-green-700">
                 <li>• 現在の取り組みを継続</li>
                 <li>• さらなる向上のための新施策</li>
                 <li>• 成功事例の他スタッフへの展開</li>
@@ -301,9 +301,9 @@ export default function RepeatAnalysisComponent() {
             </div>
           )}
 
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h4 className="font-semibold text-blue-900 mb-2">推奨アクション</h4>
-            <ul className="text-sm text-blue-700 space-y-1">
+          <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+            <h4 className="mb-2 font-semibold text-blue-900">推奨アクション</h4>
+            <ul className="space-y-1 text-sm text-blue-700">
               <li>• 定期的なリピート率モニタリング</li>
               <li>• 顧客フィードバックの収集・分析</li>
               <li>• スタッフ間での情報共有</li>
@@ -314,13 +314,13 @@ export default function RepeatAnalysisComponent() {
       </div>
 
       {/* 期間別比較 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">期間別比較</h3>
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">期間別比較</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="p-4 border border-gray-200 rounded-lg">
-            <h4 className="font-semibold text-gray-900 mb-3">6ヶ月以内リピート率</h4>
-            <div className="text-3xl font-bold text-gray-900 mb-2">
+            <h4 className="mb-3 font-semibold text-gray-900">6ヶ月以内リピート率</h4>
+            <div className="mb-2 text-3xl font-bold text-gray-900">
               {selectedPeriod === '6months' 
                 ? repeatAnalysis.repeatRate.toFixed(1)
                 : '計算中...'
@@ -332,8 +332,8 @@ export default function RepeatAnalysisComponent() {
           </div>
 
           <div className="p-4 border border-gray-200 rounded-lg">
-            <h4 className="font-semibold text-gray-900 mb-3">12ヶ月以内リピート率</h4>
-            <div className="text-3xl font-bold text-gray-900 mb-2">
+            <h4 className="mb-3 font-semibold text-gray-900">12ヶ月以内リピート率</h4>
+            <div className="mb-2 text-3xl font-bold text-gray-900">
               {selectedPeriod === '12months' 
                 ? repeatAnalysis.repeatRate.toFixed(1)
                 : '計算中...'

@@ -5,41 +5,36 @@ import {
   BarChart3, 
   TrendingUp, 
   Calendar, 
-  X, 
   Users, 
-  Repeat, 
-  ShoppingCart, 
-  UserCheck, 
-  Building2, 
   Target,
-  History,
-  Download,
-  Settings
+  RefreshCw,
+  AlertTriangle,
+  Home,
+  Package,
+  X,
+  Download
 } from 'lucide-react'
 
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
+  activeTab: string
+  onTabChange: (tabId: string) => void
 }
 
 const menuItems = [
-  { id: 'sales-analysis', label: '売上分析', icon: BarChart3, active: false },
-  { id: 'treatment-trends', label: '治療別傾向分析', icon: TrendingUp, active: false },
-  { id: 'treatment-sales', label: '治療売上推移', icon: Calendar, active: true },
-  { id: 'annual-sales', label: '年間売上推移', icon: Calendar, active: false },
-  { id: 'cancellations', label: '予約キャンセル', icon: X, active: false },
-  { id: 'repeat-analysis', label: 'リピート分析', icon: Repeat, active: false },
-  { id: 'cross-sell', label: 'クロスセル', icon: ShoppingCart, active: false },
-  { id: 'staff-sales', label: 'スタッフ別売上', icon: UserCheck, active: false },
-  { id: 'sales-comparison', label: '売上比較', icon: BarChart3, active: false },
-  { id: 'customer-attributes', label: '顧客属性分析', icon: Users, active: false },
-  { id: 'clinic-comparison', label: '院比較', icon: Building2, active: false },
-  { id: 'clinic-sales', label: '院別売上', icon: Building2, active: false },
-  { id: 'monthly-progress', label: '今月進捗', icon: Target, active: false },
-  { id: 'policy-history', label: '施策履歴', icon: History, active: false },
+  { id: 'overview', label: '概要', icon: Home },
+  { id: 'summary', label: 'サマリー分析', icon: BarChart3 },
+  { id: 'daily', label: '日別分析', icon: Calendar },
+  { id: 'comparison', label: '全院比較', icon: TrendingUp },
+  { id: 'patients', label: '来院者情報', icon: Users },
+  { id: 'services', label: '役務分析', icon: Package },
+  { id: 'goals', label: '目標達成率', icon: Target },
+  { id: 'repeat', label: 'リピート率', icon: RefreshCw },
+  { id: 'errors', label: 'エラー表示', icon: AlertTriangle }
 ]
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, activeTab, onTabChange }: SidebarProps) {
   const [filters, setFilters] = useState({
     dateLevel: 'month',
     period: 'past1',
@@ -88,12 +83,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <ul className="space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon
+                const isActive = activeTab === item.id
                 return (
                   <li key={item.id}>
                     <button
+                      onClick={() => onTabChange(item.id)}
                       className={`
                         w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors
-                        ${item.active 
+                        ${isActive 
                           ? 'bg-primary-600 text-white' 
                           : 'text-gray-700 hover:bg-gray-100'
                         }

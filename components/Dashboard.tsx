@@ -14,52 +14,23 @@ import GoalTracking from './GoalTracking'
 import RepeatAnalysis from './RepeatAnalysis'
 import ErrorDisplay from './ErrorDisplay'
 import ServicesAnalysis from './ServicesAnalysis'
-import { 
-  BarChart3,
-  Calendar,
-  Users,
-  Target,
-  RefreshCw,
-  TrendingUp,
-  Home,
-  AlertTriangle,
-  Package
-} from 'lucide-react'
 
-export default function Dashboard() {
+interface DashboardProps {
+  activeTab: string
+  tabLoading: boolean
+}
+
+export default function Dashboard({ activeTab, tabLoading }: DashboardProps) {
   const { state } = useDashboard()
-  const [activeTab, setActiveTab] = useState('overview')
-  const [tabLoading, setTabLoading] = useState(false)
-  const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-    end: new Date()
-  })
-
-  const tabs = [
-    { id: 'overview', name: '概要', icon: Home },
-    { id: 'summary', name: 'サマリー分析', icon: BarChart3 },
-    { id: 'daily', name: '日別分析', icon: Calendar },
-    { id: 'comparison', name: '全院比較', icon: TrendingUp },
-    { id: 'patients', name: '来院者情報', icon: Users },
-    { id: 'services', name: '役務分析', icon: Package },
-    { id: 'goals', name: '目標達成率', icon: Target },
-    { id: 'repeat', name: 'リピート率', icon: RefreshCw },
-    { id: 'errors', name: 'エラー表示', icon: AlertTriangle }
-  ]
-
-  const handleTabClick = async (tabId: string) => {
-    if (tabId === activeTab) return
-    
-    setTabLoading(true)
-    setActiveTab(tabId)
-    
-    // Simulate calculation time for data processing
-    if (state.apiConnected) {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+  const [dateRange, setDateRange] = useState(() => {
+    const today = new Date()
+    const thirtyDaysAgo = new Date(today)
+    thirtyDaysAgo.setDate(today.getDate() - 30)
+    return {
+      start: thirtyDaysAgo,
+      end: today
     }
-    
-    setTabLoading(false)
-  }
+  })
 
   const LoadingScreen = () => (
     <div className="flex flex-col items-center justify-center py-12">
@@ -117,32 +88,6 @@ export default function Dashboard() {
 
   return (
     <div className="p-6">
-      {/* Tab Navigation */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="flex -mb-px space-x-8">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabClick(tab.id)}
-                  disabled={tabLoading}
-                  className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } ${tabLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{tab.name}</span>
-                </button>
-              )
-            })}
-          </nav>
-        </div>
-      </div>
-
       {/* Content */}
       {tabLoading ? <LoadingScreen /> : renderContent()}
     </div>
