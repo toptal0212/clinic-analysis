@@ -150,8 +150,10 @@ export default function Sidebar({ isOpen, onClose, activeTab, onTabChange }: Sid
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">(すべて)</option>
-                <option value="shinjuku">新宿院</option>
-                <option value="ikebukuro">池袋院</option>
+                <option value="omiya">大宮院</option>
+                <option value="yokohama">横浜院</option>
+                <option value="mito">水戸院</option>
+                <option value="koriyama">郡山院</option>
               </select>
             </div>
 

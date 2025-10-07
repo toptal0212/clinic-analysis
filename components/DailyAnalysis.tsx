@@ -430,7 +430,8 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
               {(() => {
                 const treatmentData = dailyData.reduce((acc, day) => {
                   day.newPatients.concat(day.existingPatients).forEach(record => {
-                    const treatment = record.visitorTreatmentName || 'その他'
+                    console.log('Debug - Record:', record)
+                    const treatment = record.treatmentName || 'その他'
                     if (!acc[treatment]) {
                       acc[treatment] = { count: 0, revenue: 0 }
                     }
@@ -603,7 +604,7 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
                           {record.visitorTreatmentName || 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          {record.visitorStaffName || 'N/A'}
+                          {record.staff || 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                           {record.visitorInflowSourceName || 'N/A'}

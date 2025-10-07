@@ -3,6 +3,7 @@ import { MedicalForceClinic, MedicalForceService, MedicalForceUpdatedBrandCourse
 
 export class MedicalForceAPI {
   private baseURL: string
+  private cacheVersion: string = 'v4' // bump to invalidate cache after adding aliases
   private clientId: string | null = null
   private clientSecret: string | null = null
   private accessToken: string | null = null
@@ -558,7 +559,7 @@ export class MedicalForceAPI {
 
   // Cache management for 2-year data storage
   private getCacheKey(clinicId: string, year: number, month: number): string {
-    return `daily_accounts_${clinicId}_${year}_${String(month).padStart(2, '0')}`
+    return `daily_accounts_${this.cacheVersion}_${clinicId}_${year}_${String(month).padStart(2, '0')}`
   }
 
   private getCachedData(clinicId: string, year: number, month: number): any | null {
@@ -670,21 +671,38 @@ export class MedicalForceAPI {
   // Compress data for storage (simple approach)
   private compressData(data: any): any {
     try {
-      // Remove unnecessary fields to reduce size
-      return data.map((item: any) => ({
-        visitorId: item.visitorId,
-        visitorName: item.visitorName,
-        visitorAge: item.visitorAge,
-        visitorGender: item.visitorGender,
-        visitorInflowSourceName: item.visitorInflowSourceName,
-        isFirst: item.isFirst,
-        recordDate: item.recordDate,
-        totalWithTax: item.totalWithTax,
-        netTotal: item.netTotal,
-        methodPrice: item.methodPrice,
-        otherDiscountPrice: item.otherDiscountPrice,
-        note: item.note
-      }))
+      // Keep only essential fields + minimal treatment/staff for UI
+      return data.map((item: any) => {
+        const firstItem = Array.isArray(item.paymentItems) && item.paymentItems.length > 0 ? item.paymentItems[0] : undefined
+        const result = {
+          visitorId: item.visitorId,
+          visitorName: item.visitorName,
+          visitorAge: item.visitorAge,
+          visitorGender: item.visitorGender,
+          visitorInflowSourceName: item.visitorInflowSourceName,
+          isFirst: item.isFirst,
+          recordDate: item.recordDate,
+          totalWithTax: item.totalWithTax,
+          netTotal: item.netTotal,
+          methodPrice: item.methodPrice,
+          otherDiscountPrice: item.otherDiscountPrice,
+          note: item.note,
+          // Minimal fields for 施術内容/担当者 抽出
+          reservationStaffName: item.reservationStaffName || null,
+          firstPaymentItemName: firstItem?.name || null,
+          firstPaymentItemCategory: firstItem?.category || null,
+          firstPaymentItemMainStaffName: firstItem?.mainStaffName || null,
+          paymentItemsLength: Array.isArray(item.paymentItems) ? item.paymentItems.length : 0
+        } as any
+
+        // Aliases required by UI spec
+        // 施術 = category, 施術内容 = name, 担当者 = (要望に合わせて) name
+        result.treatment = firstItem?.category || null // 施術
+        result.treatmentName = firstItem?.name || null // 施術内容
+        result.staff = firstItem?.name || null // 担当者（要求どおり name を設定）
+
+        return result
+      })
     } catch (error) {
       console.error('❌ [Cache] Error compressing data:', error)
       return data
@@ -715,6 +733,24 @@ export class MedicalForceAPI {
         monthsToFetch.push({ year, month })
       }
     }
+
+    // Always refresh the most recent ~30 days even if cached (may span 2 months)
+    const refreshStart = new Date(currentDate)
+    refreshStart.setDate(refreshStart.getDate() - 30)
+    const refreshMonthsSet = new Set<string>()
+    for (let d = new Date(refreshStart.getFullYear(), refreshStart.getMonth(), 1);
+         d <= currentDate; d.setMonth(d.getMonth() + 1)) {
+      const y = d.getFullYear()
+      const m = d.getMonth()
+      refreshMonthsSet.add(`${y}-${m}`)
+    }
+    const existingKeys = new Set(monthsToFetch.map(x => `${x.year}-${x.month}`))
+    refreshMonthsSet.forEach(key => {
+      if (!existingKeys.has(key)) {
+        const [yStr, mStr] = key.split('-')
+        monthsToFetch.push({ year: parseInt(yStr, 10), month: parseInt(mStr, 10) })
+      }
+    })
     
     const totalMonths = Math.ceil((currentDate.getTime() - twoYearsAgo.getTime()) / (1000 * 60 * 60 * 24 * 30))
     const cachedMonths = totalMonths - monthsToFetch.length
@@ -1348,7 +1384,26 @@ export class DataProcessor {
     // Clinic (院別) - Use clinic ID or default
     const clinic: { [key: string]: number } = {}
     currentMonthData.forEach((item: any) => {
-      const clinicLabel = '本院' // Default for now, could be enhanced with actual clinic data
+      // Map clinic IDs to actual clinic names
+      let clinicLabel = '本院' // Default
+      if (item.clinicId) {
+        switch (item.clinicId) {
+          case 'omiya':
+            clinicLabel = '大宮院'
+            break
+          case 'yokohama':
+            clinicLabel = '横浜院'
+            break
+          case 'mito':
+            clinicLabel = '水戸院'
+            break
+          case 'koriyama':
+            clinicLabel = '郡山院'
+            break
+          default:
+            clinicLabel = '本院'
+        }
+      }
       clinic[clinicLabel] = (clinic[clinicLabel] || 0) + 1
     })
 

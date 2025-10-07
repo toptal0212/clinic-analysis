@@ -88,8 +88,26 @@ export default function SummaryAnalysis() {
     const sameDayNewRevenue = newPatients.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
     const sameDayNewAverage = newCount > 0 ? sameDayNewRevenue / newCount : 0
 
+    // 各レコードから 施術内容/担当者 を抽出（paymentItems ベース）
+    const withDerived = dailyAccounts.map((record: any, index: number) => {
+      const hasItems = Array.isArray(record.paymentItems) && record.paymentItems.length > 0
+      const firstItem = hasItems ? record.paymentItems[0] : undefined
+      const treatmentName = firstItem?.name || '未設定'
+      const staffName = firstItem?.mainStaffName || record.reservationStaffName || '担当者不明'
+      // Debug
+      console.log('DailyAnalysis Debug:', {
+        index,
+        visitorId: record.visitorId,
+        visitorName: record.visitorName,
+        paymentItemsLength: Array.isArray(record.paymentItems) ? record.paymentItems.length : 0,
+        derivedTreatmentName: treatmentName,
+        derivedStaff: staffName
+      })
+      return { ...record, _treatmentName: treatmentName, _staffName: staffName }
+    })
+
     // 患者区分別サマリー（流入元別）
-    const referralSourceSummary = dailyAccounts.reduce((acc, record) => {
+    const referralSourceSummary = withDerived.reduce((acc, record) => {
       const source = record.visitorInflowSourceName || 'その他'
       if (!acc[source]) {
         acc[source] = { count: 0, revenue: 0, newCount: 0, existingCount: 0 }
@@ -105,8 +123,8 @@ export default function SummaryAnalysis() {
     }, {} as Record<string, { count: number, revenue: number, newCount: number, existingCount: number }>)
 
     // 施術別分析（簡易版）
-    const treatmentSummary = dailyAccounts.reduce((acc, record) => {
-      const treatment = record.visitorTreatmentName || 'その他'
+    const treatmentSummary = withDerived.reduce((acc, record: any) => {
+      const treatment = record._treatmentName || 'その他'
       if (!acc[treatment]) {
         acc[treatment] = { count: 0, revenue: 0, newCount: 0, existingCount: 0 }
       }

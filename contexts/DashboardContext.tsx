@@ -232,18 +232,23 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
 
   const connectToApi = async (config: ApiConfig) => {
+    console.log('🔌 [Context] connectToApi start', { hasClientId: !!config.clientId, hasClientSecret: !!config.clientSecret })
     dispatch({ type: 'SET_LOADING', payload: true })
     dispatch({ type: 'SET_ERROR', payload: null })
 
     try {
       // Handle API connection - Bearer Token only
+      console.log('🛠️ [Context] Setting client credentials...')
       api.setClientCredentials(config.clientId, config.clientSecret)
       
       // Test API connection
+      console.log('🏥 [Context] Verifying clinics endpoint...')
       await api.getClinics()
+      console.log('✅ [Context] Clinics endpoint OK')
       
       // Update token status
       const tokenStatus = api.getTokenStatus()
+      console.log('🧾 [Context] Token status after connect:', tokenStatus)
       dispatch({ type: 'SET_TOKEN_STATUS', payload: tokenStatus })
       
       dispatch({
@@ -257,22 +262,26 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       })
 
       // Load initial data with 2-year range for comprehensive analysis
+      console.log('📥 [Context] Loading initial data...', state.dateRange)
       await loadDataFromApi(state.dateRange.start, state.dateRange.end)
+      console.log('✅ [Context] Initial data load complete')
     } catch (error) {
+      console.error('❌ [Context] connectToApi error:', error)
       dispatch({
         type: 'SET_ERROR',
         payload: error instanceof Error ? error.message : '接続に失敗しました'
       })
       throw error
     } finally {
+      console.log('⏹️ [Context] connectToApi finished')
       dispatch({ type: 'SET_LOADING', payload: false })
     }
   }
 
   const loadDataFromApi = async (startDate: string, endDate: string) => {
     try {
-      console.log('📊 [Context] Loading data from API with 2-year caching...')
-      console.log('📅 [Context] Original date range:', { startDate, endDate })
+      console.log('📊 [Context] loadDataFromApi start')
+      console.log('📅 [Context] date range:', { startDate, endDate })
       
       // Get clinic ID from the API connection
       const clinicId = state.apiKey || 'default'
@@ -292,8 +301,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       // Use 2-year cached data system
       let dailyAccountsData
       try {
-        console.log('🔄 [Context] Attempting 2-year cached data request...')
-        console.log('⏳ [Context] Loading 2 years of data with monthly caching...')
+        console.log('🔄 [Context] Trying 2-year cached request')
         
         // Create progress callback
         const onProgress = (progress: { currentStep: string, currentStepNumber: number, totalSteps: number, percentage: number }) => {
@@ -310,9 +318,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }
         
         dailyAccountsData = await api.getTwoYearData(clinicId, onProgress)
-        console.log('✅ [Context] 2-year cached data request successful')
+        console.log('✅ [Context] 2-year cached request OK')
       } catch (error) {
-        console.warn('⚠️ [Context] 2-year cached request failed, trying 6-month fallback:', error)
+        console.warn('⚠️ [Context] 2-year cached request failed, fallback to 6 months:', error)
         
         // Update progress for fallback
         dispatch({
@@ -338,10 +346,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           sixMonthStartDate, 
           sixMonthEndDate 
         })
-        console.log('⏳ [Context] Attempting 6-month data request...')
+        console.log('⏳ [Context] Requesting 6-month data...')
         
         dailyAccountsData = await api.getDailyAccounts(sixMonthStartDate, sixMonthEndDate)
-        console.log('✅ [Context] 6-month fallback successful')
+        console.log('✅ [Context] 6-month request OK')
       }
       
       console.log('✅ [Context] Daily accounts data loaded:', {
@@ -425,7 +433,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }
       })
     } catch (error) {
-      console.error('❌ [Context] Data loading failed:', error)
+      console.error('❌ [Context] loadDataFromApi error:', error)
       
       // Handle specific error types with user-friendly messages
       let errorMessage = 'データの読み込みに失敗しました'
