@@ -285,6 +285,184 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
         </div>
       </div>
 
+      {/* 表示指標 */}
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">表示指標</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* 総来院者数 */}
+          <div className="p-4 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">総来院者数</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatNumber(dailyData.reduce((sum, day) => sum + day.totalCount, 0))}人
+                </p>
+              </div>
+              <Users className="w-8 h-8 text-blue-600" />
+            </div>
+          </div>
+
+          {/* 新規来院者数 */}
+          <div className="p-4 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">新規来院者数</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatNumber(dailyData.reduce((sum, day) => sum + day.newCount, 0))}人
+                </p>
+              </div>
+              <TrendingUp className="w-8 h-8 text-green-600" />
+            </div>
+          </div>
+
+          {/* 既存来院者数 */}
+          <div className="p-4 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">既存来院者数</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatNumber(dailyData.reduce((sum, day) => sum + day.existingCount, 0))}人
+                </p>
+              </div>
+              <Calendar className="w-8 h-8 text-purple-600" />
+            </div>
+          </div>
+
+          {/* 平均単価 */}
+          <div className="p-4 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">平均単価</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(
+                    dailyData.length > 0 
+                      ? dailyData.reduce((sum, day) => sum + day.dailyAverage, 0) / dailyData.length
+                      : 0
+                  )}
+                </p>
+              </div>
+              <DollarSign className="w-8 h-8 text-orange-600" />
+            </div>
+          </div>
+
+          {/* 新規平均単価 */}
+          <div className="p-4 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">新規平均単価</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(
+                    dailyData.length > 0 
+                      ? dailyData.reduce((sum, day) => sum + day.newDailyAverage, 0) / dailyData.length
+                      : 0
+                  )}
+                </p>
+              </div>
+              <TrendingUp className="w-8 h-8 text-red-600" />
+            </div>
+          </div>
+
+          {/* 既存平均単価 */}
+          <div className="p-4 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">既存平均単価</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(
+                    dailyData.length > 0 
+                      ? dailyData.reduce((sum, day) => sum + day.existingDailyAverage, 0) / dailyData.length
+                      : 0
+                  )}
+                </p>
+              </div>
+              <Calendar className="w-8 h-8 text-indigo-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* カテゴリー別分析 */}
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別分析</h3>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {/* 流入元別分析 */}
+          <div>
+            <h4 className="mb-3 font-semibold text-gray-800 text-md">流入元別分析</h4>
+            <div className="space-y-2">
+              {(() => {
+                const referralSourceData = dailyData.reduce((acc, day) => {
+                  day.newPatients.concat(day.existingPatients).forEach(record => {
+                    const source = record.visitorInflowSourceName || 'その他'
+                    if (!acc[source]) {
+                      acc[source] = { count: 0, revenue: 0 }
+                    }
+                    acc[source].count += 1
+                    acc[source].revenue += record.totalWithTax || 0
+                  })
+                  return acc
+                }, {} as Record<string, { count: number, revenue: number }>)
+
+                return Object.entries(referralSourceData)
+                  .sort(([,a], [,b]) => b.revenue - a.revenue)
+                  .slice(0, 5)
+                  .map(([source, data]) => (
+                    <div key={source} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+                      <div>
+                        <div className="font-medium text-gray-900">{source}</div>
+                        <div className="text-sm text-gray-600">{formatNumber(data.count)}件</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-gray-900">{formatCurrency(data.revenue)}</div>
+                        <div className="text-sm text-gray-600">
+                          単価: {formatCurrency(data.count > 0 ? data.revenue / data.count : 0)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              })()}
+            </div>
+          </div>
+
+          {/* 施術別分析 */}
+          <div>
+            <h4 className="mb-3 font-semibold text-gray-800 text-md">施術別分析</h4>
+            <div className="space-y-2">
+              {(() => {
+                const treatmentData = dailyData.reduce((acc, day) => {
+                  day.newPatients.concat(day.existingPatients).forEach(record => {
+                    const treatment = record.visitorTreatmentName || 'その他'
+                    if (!acc[treatment]) {
+                      acc[treatment] = { count: 0, revenue: 0 }
+                    }
+                    acc[treatment].count += 1
+                    acc[treatment].revenue += record.totalWithTax || 0
+                  })
+                  return acc
+                }, {} as Record<string, { count: number, revenue: number }>)
+
+                return Object.entries(treatmentData)
+                  .sort(([,a], [,b]) => b.revenue - a.revenue)
+                  .slice(0, 5)
+                  .map(([treatment, data]) => (
+                    <div key={treatment} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+                      <div>
+                        <div className="font-medium text-gray-900">{treatment}</div>
+                        <div className="text-sm text-gray-600">{formatNumber(data.count)}件</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-gray-900">{formatCurrency(data.revenue)}</div>
+                        <div className="text-sm text-gray-600">
+                          単価: {formatCurrency(data.count > 0 ? data.revenue / data.count : 0)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              })()}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 選択日の詳細情報 */}
       {selectedDayData && (
         <div className="p-6 bg-white rounded-lg shadow">

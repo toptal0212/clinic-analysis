@@ -14,6 +14,7 @@ import GoalTracking from './GoalTracking'
 import RepeatAnalysis from './RepeatAnalysis'
 import ErrorDisplay from './ErrorDisplay'
 import ServicesAnalysis from './ServicesAnalysis'
+import AdvertisingAnalysis from './AdvertisingAnalysis'
 
 interface DashboardProps {
   activeTab: string
@@ -79,6 +80,8 @@ export default function Dashboard({ activeTab, tabLoading }: DashboardProps) {
         return <GoalTracking />
       case 'repeat':
         return <RepeatAnalysis />
+      case 'advertising':
+        return <AdvertisingAnalysis />
       case 'errors':
         return <ErrorDisplay errors={[]} />
       default:

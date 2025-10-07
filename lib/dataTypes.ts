@@ -12,7 +12,7 @@ export interface Patient {
   isCancelled: boolean
   referralSource: string // 流入元（知ったきっかけ）
   appointmentRoute: string // 予約経路（来院区分）
-  staff: string // 担当者
+  staff: string // 担当者 (mainStaffName from daily report API)
   visitDate: Date
   treatmentDate: Date
   isNewPatient: boolean // 新規/既存区分
@@ -122,9 +122,9 @@ export interface MedicalForceUpdatedBrandCourse {
 export interface DailyAccountValue {
   createdAt: string
   url: string
-  isFirst: boolean
+  isFirst?: boolean
   visitorId: string
-  reservationId: string
+  reservationId?: string
   visitorCode: string
   visitorKarteNumber: string
   visitorName: string
@@ -133,8 +133,12 @@ export interface DailyAccountValue {
   visitorInflowSourceName: string
   visitorInflowSourceLabel: string
   visitorColumnValues: string[]
-  confirmedAt: string
+  confirmedAt: string | null
   recordDate: string
+  orderingDate?: string
+  operateDate?: string
+  reservationStaffName?: string
+  reservationInflowPathLabel?: string | null
   karteTags: string
   paymentTags: string
   willPaidPrice: number
@@ -151,8 +155,16 @@ export interface DailyAccountValue {
   coolingoffPriceWithoutTax: number
   advancePaymentTransactionPriceWithoutTax: number
   advancePaymentTransactionPriceWithTax: number
-  note: string
+  advancePaymentRefundPriceWithoutTax?: number
+  advancePaymentRefundPriceWithTax?: number
+  note: string | null
   paymentItems: PaymentItem[]
+  payment?: {
+    id: string
+    tax_calculation_type: string
+    decimal_processing_type: string
+  }
+  isPaymentBalanced?: boolean
 }
 
 export interface PaymentItem {
@@ -160,29 +172,40 @@ export interface PaymentItem {
   kind: string
   category: string
   name: string
-  operationId: string
-  priceWithTax: number
-  genuinePriceWithTax: number
-  retrieveReceivable: number
+  optionId?: string
   mainStaffName: string
-  subStaffName: string
-  courseContractAmount: number
-  courseDigestionAmount: number
+  subStaffName?: string
+  quantity?: number
+  quantityUnit?: string
+  priceWithTax: number
+  priceWithoutTax?: number
+  costWithTax?: number
+  costWithoutTax?: number
+  profitWithTax?: number
+  profitWithoutTax?: number
+  taxCategory: string
+  tax?: number
+  genuinePriceWithTax: number
+  genuinePriceWithoutTax?: number
+  courseContractAmountWithTax?: number
+  courseContractAmountWithoutTax?: number
+  courseDigestionAmountWithTax?: number
+  courseDigestionAmountWithoutTax?: number
   discounts: Record<string, number>
   invitations: Record<string, number>
-  methods: Record<string, number>
-  advancePaymentPriceWithoutTax: number
-  advancePaymentPriceWithTax: number
-  advancePaymentTransactionPriceWithoutTax: number
-  advancePaymentTransactionPriceWithTax: number
-  advancePaymentTransactionReceivedMainStaffName: string
-  advancePaymentTransactionReceivedSubStaffName: string
-  advancePaymentRefundReceivedMainStaffName: string
-  advancePaymentRefundReceivedSubStaffName: string
-  operationAdvancePaymentTransactionPriceWithoutTax: number
-  operationAdvancePaymentTransactionPriceWithTax: number
-  operationAdvancePaymentTransactionReceivedMainStaffName: string
-  operationAdvancePaymentTransactionReceivedSubStaffName: string
+  practiceTags?: string
+  advancePaymentPriceWithoutTax?: number
+  advancePaymentPriceWithTax?: number
+  advancePaymentTransactionPriceWithoutTax?: number
+  advancePaymentTransactionPriceWithTax?: number
+  advancePaymentTransactionReceivedMainStaffName?: string
+  advancePaymentTransactionReceivedSubStaffName?: string
+  advancePaymentRefundReceivedMainStaffName?: string
+  advancePaymentRefundReceivedSubStaffName?: string
+  operationAdvancePaymentTransactionPriceWithoutTax?: number
+  operationAdvancePaymentTransactionPriceWithTax?: number
+  operationAdvancePaymentTransactionReceivedMainStaffName?: string
+  operationAdvancePaymentTransactionReceivedSubStaffName?: string
 }
 
 export interface DailyAccountsResponse {
@@ -218,12 +241,18 @@ export interface StaffGoal {
   targetAmount: number
   targetNewAverage: number
   targetExistingAverage: number
+  targetBeautyRevenue: number
+  targetOtherRevenue: number
   currentAmount: number
   currentNewAverage: number
   currentExistingAverage: number
+  currentBeautyRevenue: number
+  currentOtherRevenue: number
   achievementRate: number
   newAchievementRate: number
   existingAchievementRate: number
+  beautyAchievementRate: number
+  otherAchievementRate: number
 }
 
 export interface RepeatAnalysis {

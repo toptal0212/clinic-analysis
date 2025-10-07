@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
-import { MedicalForceService } from '@/lib/dataTypes'
+import { MedicalForceService, MedicalForceUpdatedBrandCourse } from '@/lib/dataTypes'
 import { 
   Calendar, 
   Clock, 
@@ -23,14 +23,15 @@ export default function ServicesAnalysis() {
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'updated_at' | 'duration'>('updated_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  const services: MedicalForceService[] = state.data.services || []
+  // Use service search results instead of empty services data
+  const serviceSearchResults: MedicalForceUpdatedBrandCourse[] = state.data.serviceSearchResults || []
 
   // Filter and sort services
   const filteredServices = useMemo(() => {
-    let filtered = services.filter(service => {
-      const matchesSearch = service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           service.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesCategory = categoryFilter === 'all' || service.category === categoryFilter
+    let filtered = serviceSearchResults.filter(service => {
+      const matchesSearch = service.course_name.toLowerCase().includes(searchTerm.toLowerCase())
+      // For brand courses, we'll use course_name as the category for now
+      const matchesCategory = categoryFilter === 'all' || 'brand_course' === categoryFilter
       return matchesSearch && matchesCategory
     })
 
@@ -40,20 +41,22 @@ export default function ServicesAnalysis() {
       
       switch (sortBy) {
         case 'name':
-          aValue = a.name
-          bValue = b.name
+          aValue = a.course_name
+          bValue = b.course_name
           break
         case 'price':
-          aValue = a.price
-          bValue = b.price
+          // Brand courses don't have price, use course_count as alternative
+          aValue = parseInt(a.course_count) || 0
+          bValue = parseInt(b.course_count) || 0
           break
         case 'updated_at':
           aValue = new Date(a.updated_at).getTime()
           bValue = new Date(b.updated_at).getTime()
           break
         case 'duration':
-          aValue = a.duration_minutes
-          bValue = b.duration_minutes
+          // Brand courses don't have duration, use course_count as alternative
+          aValue = parseInt(a.course_count) || 0
+          bValue = parseInt(b.course_count) || 0
           break
         default:
           return 0
@@ -67,20 +70,23 @@ export default function ServicesAnalysis() {
     })
 
     return filtered
-  }, [services, searchTerm, categoryFilter, sortBy, sortOrder])
+  }, [serviceSearchResults, searchTerm, categoryFilter, sortBy, sortOrder])
 
-  // Get unique categories
+  // Get unique categories (for brand courses, we'll use a single category)
   const categories = useMemo(() => {
-    const uniqueCategories = Array.from(new Set(services.map(service => service.category)))
-    return uniqueCategories
-  }, [services])
+    return ['all', 'brand_course']
+  }, [])
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const totalServices = services.length
-    const activeServices = services.filter(s => s.is_active).length
-    const avgPrice = services.length > 0 ? services.reduce((sum, s) => sum + s.price, 0) / services.length : 0
-    const avgDuration = services.length > 0 ? services.reduce((sum, s) => sum + s.duration_minutes, 0) / services.length : 0
+    const totalServices = serviceSearchResults.length
+    const activeServices = serviceSearchResults.filter(s => !s.canceled_at).length
+    const avgPrice = serviceSearchResults.length > 0 
+      ? serviceSearchResults.reduce((sum, s) => sum + (parseInt(s.course_count) || 0), 0) / serviceSearchResults.length 
+      : 0
+    const avgDuration = serviceSearchResults.length > 0 
+      ? serviceSearchResults.reduce((sum, s) => sum + (parseInt(s.course_count) || 0), 0) / serviceSearchResults.length 
+      : 0
     
     return {
       totalServices,
@@ -88,7 +94,7 @@ export default function ServicesAnalysis() {
       avgPrice: Math.round(avgPrice),
       avgDuration: Math.round(avgDuration)
     }
-  }, [services])
+  }, [serviceSearchResults])
 
   const getCategoryIcon = (category: string) => {
     switch (category.toLowerCase()) {
@@ -133,7 +139,7 @@ export default function ServicesAnalysis() {
     return remainingMinutes > 0 ? `${hours}時間${remainingMinutes}分` : `${hours}時間`
   }
 
-  if (services.length === 0) {
+  if (serviceSearchResults.length === 0) {
     return (
       <div className="p-6 bg-white rounded-lg shadow">
         <div className="py-12 text-center">
@@ -179,8 +185,8 @@ export default function ServicesAnalysis() {
               <DollarSign className="w-6 h-6 text-yellow-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">平均価格</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(stats.avgPrice)}</p>
+              <p className="text-sm font-medium text-gray-600">平均コース回数</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.avgPrice}回</p>
             </div>
           </div>
         </div>
@@ -191,8 +197,8 @@ export default function ServicesAnalysis() {
               <Clock className="w-6 h-6 text-purple-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">平均時間</p>
-              <p className="text-2xl font-bold text-gray-900">{formatDuration(stats.avgDuration)}</p>
+              <p className="text-sm font-medium text-gray-600">平均コース回数</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.avgDuration}回</p>
             </div>
           </div>
         </div>
@@ -233,8 +239,8 @@ export default function ServicesAnalysis() {
             >
               <option value="updated_at">更新日</option>
               <option value="name">名前</option>
-              <option value="price">価格</option>
-              <option value="duration">時間</option>
+              <option value="price">コース回数</option>
+              <option value="duration">コース回数</option>
             </select>
 
             <button
@@ -265,10 +271,10 @@ export default function ServicesAnalysis() {
                   カテゴリ
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  価格
+                  コース回数
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  時間
+                  契約日
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   更新日
@@ -280,37 +286,35 @@ export default function ServicesAnalysis() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredServices.map((service) => (
-                <tr key={service.id} className="hover:bg-gray-50">
+                <tr key={service.course_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{service.name}</div>
-                      {service.description && (
-                        <div className="text-sm text-gray-500">{service.description}</div>
-                      )}
+                      <div className="text-sm font-medium text-gray-900">{service.course_name}</div>
+                      <div className="text-sm text-gray-500">コースID: {service.course_id}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      {getCategoryIcon(service.category)}
-                      <span className="ml-2 text-sm text-gray-900">{service.category}</span>
+                      {getCategoryIcon('brand_course')}
+                      <span className="ml-2 text-sm text-gray-900">ブランドコース</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                    {formatPrice(service.price)}
+                    {service.course_count}回
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                    {formatDuration(service.duration_minutes)}
+                    {formatDate(service.contracted_at)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                     {formatDate(service.updated_at)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      service.is_active 
+                      !service.canceled_at 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-red-100 text-red-800'
                     }`}>
-                      {service.is_active ? 'アクティブ' : '非アクティブ'}
+                      {!service.canceled_at ? 'アクティブ' : 'キャンセル済み'}
                     </span>
                   </td>
                 </tr>

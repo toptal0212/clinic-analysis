@@ -22,6 +22,7 @@ export interface DashboardState {
     services: any[]
     brandCourses: any[]
     dailyAccounts: any[]
+    serviceSearchResults: any[]
   }
   currentMonthMetrics: {
     visitCount: number
@@ -73,7 +74,7 @@ export interface DashboardState {
 }
 
 export interface DashboardAction {
-  type: 'SET_PERIOD' | 'SET_CLINIC' | 'SET_DATE_RANGE' | 'SET_FILTERS' | 'SET_DATA' | 'SET_LOADING' | 'SET_ERROR' | 'SET_API_CONNECTION' | 'SET_TOKEN_STATUS' | 'SET_CURRENT_MONTH_METRICS' | 'SET_TREND_DATA' | 'SET_DEMOGRAPHICS' | 'SET_PROGRESS' | 'RESET'
+  type: 'SET_PERIOD' | 'SET_CLINIC' | 'SET_DATE_RANGE' | 'SET_FILTERS' | 'SET_DATA' | 'SET_LOADING' | 'SET_ERROR' | 'SET_API_CONNECTION' | 'SET_TOKEN_STATUS' | 'SET_CURRENT_MONTH_METRICS' | 'SET_TREND_DATA' | 'SET_DEMOGRAPHICS' | 'SET_PROGRESS' | 'SET_SERVICE_SEARCH_RESULTS' | 'RESET'
   payload?: any
 }
 
@@ -103,7 +104,8 @@ const initialState: DashboardState = {
     appointments: [],
     services: [],
     brandCourses: [],
-    dailyAccounts: []
+    dailyAccounts: [],
+    serviceSearchResults: []
   },
   currentMonthMetrics: {
     visitCount: 0,
@@ -184,6 +186,8 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
       return { ...state, demographics: action.payload }
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
+    case 'SET_SERVICE_SEARCH_RESULTS':
+      return { ...state, data: { ...state.data, serviceSearchResults: action.payload } }
     case 'RESET':
       return initialState
     default:
@@ -494,6 +498,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_ERROR', payload: null })
 
       const results = await api.getUpdatedBrandCourses(clinicId, date)
+      
+      // Store the results in state for ServicesAnalysis component
+      dispatch({ type: 'SET_SERVICE_SEARCH_RESULTS', payload: results })
+      
       return results
     } catch (error) {
       dispatch({

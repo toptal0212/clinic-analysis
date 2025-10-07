@@ -12,7 +12,8 @@ import {
   Home,
   Package,
   X,
-  Download
+  Download,
+  MousePointer
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -22,17 +23,18 @@ interface SidebarProps {
   onTabChange: (tabId: string) => void
 }
 
-const menuItems = [
-  { id: 'overview', label: '概要', icon: Home },
-  { id: 'summary', label: 'サマリー分析', icon: BarChart3 },
-  { id: 'daily', label: '日別分析', icon: Calendar },
-  { id: 'comparison', label: '全院比較', icon: TrendingUp },
-  { id: 'patients', label: '来院者情報', icon: Users },
-  { id: 'services', label: '役務分析', icon: Package },
-  { id: 'goals', label: '目標達成率', icon: Target },
-  { id: 'repeat', label: 'リピート率', icon: RefreshCw },
-  { id: 'errors', label: 'エラー表示', icon: AlertTriangle }
-]
+  const menuItems = [
+    { id: 'overview', label: '概要', icon: Home },
+    { id: 'summary', label: 'サマリー分析', icon: BarChart3 },
+    { id: 'daily', label: '日別分析', icon: Calendar },
+    { id: 'comparison', label: '全院比較', icon: TrendingUp },
+    { id: 'patients', label: '来院者情報', icon: Users },
+    { id: 'services', label: '役務分析', icon: Package },
+    { id: 'goals', label: '目標達成率', icon: Target },
+    { id: 'repeat', label: 'リピート率', icon: RefreshCw },
+    { id: 'advertising', label: '広告分析', icon: MousePointer },
+    { id: 'errors', label: 'エラー表示', icon: AlertTriangle }
+  ]
 
 export default function Sidebar({ isOpen, onClose, activeTab, onTabChange }: SidebarProps) {
   const [filters, setFilters] = useState({

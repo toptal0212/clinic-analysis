@@ -1139,7 +1139,7 @@ export class DataProcessor {
       isCancelled: value.cancelPriceWithTax > 0,
       referralSource: value.visitorInflowSourceName || 'その他',
       appointmentRoute: '来院', // Not available in daily accounts
-      staff: value.paymentItems?.[0]?.mainStaffName || '担当者不明',
+      staff: value.paymentItems?.[0]?.mainStaffName || value.reservationStaffName || '担当者不明',
       visitDate: new Date(value.recordDate),
       treatmentDate: new Date(value.confirmedAt),
       isNewPatient: value.isFirst,
