@@ -268,7 +268,7 @@ export interface RepeatAnalysis {
 export interface ErrorData {
   type: 'MISSING_PATIENT_CODE' | 'MISSING_AGE' | 'MISSING_REFERRAL_SOURCE' | 
         'MISSING_APPOINTMENT_ROUTE' | 'MISSING_TREATMENT_CATEGORY' | 'MISSING_STAFF' |
-        'INVALID_DATA' | 'DUPLICATE_DATA'
+        'INVALID_DATA' | 'DUPLICATE_DATA' | 'INVALID_TREATMENT_CATEGORY' | 'DATA_MISMATCH'
   message: string
   row: number
   data: any

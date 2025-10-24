@@ -11,10 +11,17 @@ import DailyAnalysis from './DailyAnalysis'
 import ClinicComparison from './ClinicComparison'
 import PatientDetails from './PatientDetails'
 import GoalTracking from './GoalTracking'
+import GoalManagement from './GoalManagement'
 import RepeatAnalysis from './RepeatAnalysis'
 import ErrorDisplay from './ErrorDisplay'
 import ServicesAnalysis from './ServicesAnalysis'
 import AdvertisingAnalysis from './AdvertisingAnalysis'
+import TreatmentHierarchyAnalysis from './TreatmentHierarchyAnalysis'
+import ClinicDataView from './ClinicDataView'
+import HospitalTrendGraphs from './HospitalTrendGraphs'
+import DebugDisplay from './DebugDisplay'
+import SalesTableAnalysis from './SalesTableAnalysis'
+import TreatmentCategoryDebug from './TreatmentCategoryDebug'
 
 interface DashboardProps {
   activeTab: string
@@ -77,11 +84,23 @@ export default function Dashboard({ activeTab, tabLoading }: DashboardProps) {
       case 'services':
         return <ServicesAnalysis />
       case 'goals':
-        return <GoalTracking />
+        return <GoalManagement />
       case 'repeat':
         return <RepeatAnalysis />
       case 'advertising':
         return <AdvertisingAnalysis />
+      case 'treatment-hierarchy':
+        return <TreatmentHierarchyAnalysis dateRange={dateRange} />
+      case 'clinic-data':
+        return <ClinicDataView dateRange={dateRange} />
+      case 'hospital-trends':
+        return <HospitalTrendGraphs dateRange={dateRange} />
+      case 'debug':
+        return <DebugDisplay />
+      case 'sales-table':
+        return <SalesTableAnalysis dateRange={dateRange} />
+      case 'treatment-category-debug':
+        return <TreatmentCategoryDebug />
       case 'errors':
         return <ErrorDisplay errors={[]} />
       default:

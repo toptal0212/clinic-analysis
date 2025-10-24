@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Menu, User, Settings, Bell, BarChart3, Database, RefreshCw } from 'lucide-react'
 import { useDashboard } from '@/contexts/DashboardContext'
 import ApiConnection from './ApiConnection'
@@ -14,6 +14,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const { state, connectToApi, refreshData } = useDashboard()
   const [showApiModal, setShowApiModal] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
 
   const handleRefresh = async () => {
     if (!state.apiConnected) return
@@ -21,12 +22,21 @@ export default function Header({ onMenuClick }: HeaderProps) {
     setRefreshing(true)
     try {
       await refreshData()
+      // Update the last refresh time
+      setLastUpdateTime(new Date().toLocaleString('ja-JP'))
     } catch (error) {
       console.error('Refresh failed:', error)
     } finally {
       setRefreshing(false)
     }
   }
+
+  // Set initial update time when API connects
+  useEffect(() => {
+    if (state.apiConnected && !lastUpdateTime) {
+      setLastUpdateTime(new Date().toLocaleString('ja-JP'))
+    }
+  }, [state.apiConnected, lastUpdateTime])
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm">
       <div className="flex items-center justify-between px-6 py-4">
@@ -92,6 +102,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
               <div className="flex flex-col">
                 <span className="text-gray-600">
                   {state.dataSource === 'api' ? 'API接続済み' : 'CSV読み込み済み'}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {state.currentClinic ? state.currentClinic.name : '全院データ (14ヶ月)'}
+                </span>
+                <span className="text-xs text-gray-400">
+                  データベース更新: {lastUpdateTime || '未接続'}
                 </span>
                 {/* {state.tokenStatus && state.dataSource === 'api' && (
                   <span className="text-xs text-gray-500">

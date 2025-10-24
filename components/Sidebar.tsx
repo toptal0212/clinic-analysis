@@ -13,7 +13,11 @@ import {
   Package,
   X,
   Download,
-  MousePointer
+  MousePointer,
+  Stethoscope,
+  Building2,
+  Table,
+  Database
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -30,6 +34,12 @@ interface SidebarProps {
     { id: 'comparison', label: '全院比較', icon: TrendingUp },
     { id: 'patients', label: '来院者情報', icon: Users },
     { id: 'services', label: '役務分析', icon: Package },
+    { id: 'treatment-hierarchy', label: '施術階層分析', icon: Stethoscope },
+    { id: 'clinic-data', label: 'クリニック別データ', icon: Building2 },
+    { id: 'hospital-trends', label: '売上・来院数推移', icon: TrendingUp },
+    { id: 'sales-table', label: '売上表分析', icon: Table },
+    { id: 'treatment-category-debug', label: '治療カテゴリーデバッグ', icon: Database },
+    { id: 'debug', label: 'デバッグ情報', icon: AlertTriangle },
     { id: 'goals', label: '目標達成率', icon: Target },
     { id: 'repeat', label: 'リピート率', icon: RefreshCw },
     { id: 'advertising', label: '広告分析', icon: MousePointer },
@@ -108,7 +118,7 @@ export default function Sidebar({ isOpen, onClose, activeTab, onTabChange }: Sid
           </nav>
 
           {/* Filters */}
-          <div className="p-4 space-y-4 border-t border-gray-200">
+          <div className="hidden p-4 space-y-4 border-t border-gray-200">
             <div>
               <label className="block mb-1 text-xs font-medium text-gray-700">
                 DateLevel

@@ -49,17 +49,17 @@ export default function ProgressModal() {
       }}
     >
       <div 
-        className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4"
+        className="w-full max-w-md p-8 mx-4 bg-white rounded-lg shadow-xl"
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
       >
         {/* Progress Header */}
-        <div className="text-center mb-6">
-          <div className="mx-auto flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="mb-6 text-center">
+          <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full">
+            <div className="w-8 h-8 border-b-2 border-blue-600 rounded-full animate-spin"></div>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">データ取得中</h3>
+          <h3 className="mb-2 text-lg font-semibold text-gray-900">データ取得中</h3>
           <p className="text-sm text-gray-600">2年間のデータを取得しています...</p>
         </div>
         
@@ -69,9 +69,9 @@ export default function ProgressModal() {
             <span className="text-sm font-medium text-gray-700">進捗</span>
             <span className="text-sm font-medium text-blue-600">{state.progress.percentage}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
+          <div className="w-full h-3 bg-gray-200 rounded-full">
             <div 
-              className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+              className="h-3 transition-all duration-500 ease-out bg-blue-600 rounded-full"
               style={{ width: `${state.progress.percentage}%` }}
             ></div>
           </div>
@@ -79,15 +79,15 @@ export default function ProgressModal() {
         
         {/* Progress Details */}
         <div className="text-center">
-          <p className="text-sm text-gray-800 mb-2 font-medium">{state.progress.currentStep}</p>
+          <p className="mb-2 text-sm font-medium text-gray-800">{state.progress.currentStep}</p>
           <p className="text-xs text-gray-500">
             ステップ {state.progress.currentStepNumber} / {state.progress.totalSteps}
           </p>
         </div>
         
         {/* Warning Message */}
-        <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-          <p className="text-xs text-yellow-800 text-center">
+        <div className="p-3 mt-6 border border-yellow-200 rounded-md bg-yellow-50">
+          <p className="text-xs text-center text-yellow-800">
             ⚠️ データ取得中は他の操作を行わないでください
           </p>
         </div>

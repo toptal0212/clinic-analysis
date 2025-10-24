@@ -22,7 +22,12 @@ export interface DashboardState {
     services: any[]
     brandCourses: any[]
     dailyAccounts: any[]
-    serviceSearchResults: any[]
+    clinicData: {
+      yokohama: { dailyAccounts: any[], patients: any[], accounting: any[] }
+      koriyama: { dailyAccounts: any[], patients: any[], accounting: any[] }
+      mito: { dailyAccounts: any[], patients: any[], accounting: any[] }
+      omiya: { dailyAccounts: any[], patients: any[], accounting: any[] }
+    }
   }
   currentMonthMetrics: {
     visitCount: number
@@ -59,6 +64,10 @@ export interface DashboardState {
   apiConnected: boolean
   apiKey: string | null
   dataSource: 'api' | null
+  currentClinic: {
+    id: string
+    name: string
+  } | null
   tokenStatus?: {
     hasToken: boolean
     message: string
@@ -74,16 +83,15 @@ export interface DashboardState {
 }
 
 export interface DashboardAction {
-  type: 'SET_PERIOD' | 'SET_CLINIC' | 'SET_DATE_RANGE' | 'SET_FILTERS' | 'SET_DATA' | 'SET_LOADING' | 'SET_ERROR' | 'SET_API_CONNECTION' | 'SET_TOKEN_STATUS' | 'SET_CURRENT_MONTH_METRICS' | 'SET_TREND_DATA' | 'SET_DEMOGRAPHICS' | 'SET_PROGRESS' | 'SET_SERVICE_SEARCH_RESULTS' | 'RESET'
+  type: 'SET_PERIOD' | 'SET_CLINIC' | 'SET_DATE_RANGE' | 'SET_FILTERS' | 'SET_DATA' | 'SET_LOADING' | 'SET_ERROR' | 'SET_API_CONNECTION' | 'SET_TOKEN_STATUS' | 'SET_CURRENT_MONTH_METRICS' | 'SET_TREND_DATA' | 'SET_DEMOGRAPHICS' | 'SET_PROGRESS' | 'RESET'
   payload?: any
 }
 
 export interface ApiConfig {
   clientId: string
   clientSecret: string
-  // Service search parameters
-  clinicId?: string
-  serviceSearchDate?: string
+  clinicId: string
+  clinicName: string
 }
 
 // Initial state
@@ -105,7 +113,12 @@ const initialState: DashboardState = {
     services: [],
     brandCourses: [],
     dailyAccounts: [],
-    serviceSearchResults: []
+    clinicData: {
+      yokohama: { dailyAccounts: [], patients: [], accounting: [] },
+      koriyama: { dailyAccounts: [], patients: [], accounting: [] },
+      mito: { dailyAccounts: [], patients: [], accounting: [] },
+      omiya: { dailyAccounts: [], patients: [], accounting: [] }
+    }
   },
   currentMonthMetrics: {
     visitCount: 0,
@@ -142,6 +155,7 @@ const initialState: DashboardState = {
   apiConnected: false,
   apiKey: null,
   dataSource: null,
+  currentClinic: null,
   progress: {
     isActive: false,
     currentStep: '',
@@ -174,7 +188,11 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
         apiConnected: action.payload.connected,
         apiKey: action.payload.apiKey,
         dataSource: action.payload.dataSource,
-        dateRange: action.payload.dateRange || state.dateRange
+        dateRange: action.payload.dateRange || state.dateRange,
+        currentClinic: action.payload.clinicId && action.payload.clinicName ? {
+          id: action.payload.clinicId,
+          name: action.payload.clinicName
+        } : null
       }
     case 'SET_TOKEN_STATUS':
       return { ...state, tokenStatus: action.payload }
@@ -186,8 +204,6 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
       return { ...state, demographics: action.payload }
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
-    case 'SET_SERVICE_SEARCH_RESULTS':
-      return { ...state, data: { ...state.data, serviceSearchResults: action.payload } }
     case 'RESET':
       return initialState
     default:
@@ -202,7 +218,6 @@ const DashboardContext = createContext<{
   connectToApi: (config: ApiConfig) => Promise<void>
   loadData: () => Promise<void>
   refreshData: () => Promise<void>
-  searchServices: (clinicId: string, date: string) => Promise<any[]>
 } | null>(null)
 
 // Provider
@@ -232,37 +247,28 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
 
   const connectToApi = async (config: ApiConfig) => {
-    console.log('🔌 [Context] connectToApi start', { hasClientId: !!config.clientId, hasClientSecret: !!config.clientSecret })
+    console.log('🔌 [Context] connectToApi start - Loading all clinic data')
     dispatch({ type: 'SET_LOADING', payload: true })
     dispatch({ type: 'SET_ERROR', payload: null })
 
     try {
-      // Handle API connection - Bearer Token only
-      console.log('🛠️ [Context] Setting client credentials...')
-      api.setClientCredentials(config.clientId, config.clientSecret)
-      
-      // Test API connection
-      console.log('🏥 [Context] Verifying clinics endpoint...')
-      await api.getClinics()
-      console.log('✅ [Context] Clinics endpoint OK')
-      
-      // Update token status
-      const tokenStatus = api.getTokenStatus()
-      console.log('🧾 [Context] Token status after connect:', tokenStatus)
-      dispatch({ type: 'SET_TOKEN_STATUS', payload: tokenStatus })
+      // Set up API connection for all clinics
+      console.log('🛠️ [Context] Setting up multi-clinic data loading...')
       
       dispatch({
         type: 'SET_API_CONNECTION',
         payload: {
           connected: true,
-          apiKey: config.clientId,
+          apiKey: 'all-clinics',
           dataSource: 'api',
-          dateRange: state.dateRange
+          dateRange: state.dateRange,
+          clinicId: 'all',
+          clinicName: '全院'
         }
       })
 
-      // Load initial data with 2-year range for comprehensive analysis
-      console.log('📥 [Context] Loading initial data...', state.dateRange)
+      // Load initial data with 14-month range from all clinics
+      console.log('📥 [Context] Loading initial data from all clinics...', state.dateRange)
       await loadDataFromApi(state.dateRange.start, state.dateRange.end)
       console.log('✅ [Context] Initial data load complete')
     } catch (error) {
@@ -278,13 +284,87 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Load data monthly to handle large datasets
+  const loadMonthlyData = async (api: MedicalForceAPI, startDate: string, endDate: string, clinicName: string) => {
+    console.log(`📅 [Monthly Load] Starting monthly data load for ${clinicName}`)
+    
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const allValues: any[] = []
+    let totalRevenue = 0
+    let totalNetRevenue = 0
+    
+    // Generate monthly date ranges
+    const monthlyRanges = []
+    const current = new Date(start.getFullYear(), start.getMonth(), 1)
+    
+    while (current <= end) {
+      const monthStart = new Date(current)
+      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0)
+      
+      // Don't go beyond the end date
+      if (monthEnd > end) {
+        monthEnd.setTime(end.getTime())
+      }
+      
+      monthlyRanges.push({
+        start: monthStart.toISOString().split('T')[0],
+        end: monthEnd.toISOString().split('T')[0],
+        month: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`
+      })
+      
+      current.setMonth(current.getMonth() + 1)
+    }
+    
+    console.log(`📅 [Monthly Load] Generated ${monthlyRanges.length} monthly ranges for ${clinicName}`)
+    
+    // Load data for each month
+    for (let i = 0; i < monthlyRanges.length; i++) {
+      const range = monthlyRanges[i]
+      
+      try {
+        console.log(`📅 [Monthly Load] Loading ${range.month} for ${clinicName}: ${range.start} to ${range.end}`)
+        
+        const monthData = await api.getDailyAccounts(range.start, range.end)
+        
+        if (monthData.values && monthData.values.length > 0) {
+          allValues.push(...monthData.values)
+          totalRevenue += monthData.total || 0
+          totalNetRevenue += monthData.netTotal || 0
+          
+          console.log(`✅ [Monthly Load] ${range.month} loaded: ${monthData.values.length} records`)
+        } else {
+          console.log(`⚠️ [Monthly Load] No data for ${range.month}`)
+        }
+        
+        // Small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 200))
+        
+      } catch (error) {
+        console.error(`❌ [Monthly Load] Failed to load ${range.month} for ${clinicName}:`, error)
+        // Continue with next month even if one fails
+      }
+    }
+    
+    console.log(`✅ [Monthly Load] Completed for ${clinicName}: ${allValues.length} total records`)
+    
+    return {
+      clinicId: clinicName,
+      total: totalRevenue,
+      netTotal: totalNetRevenue,
+      values: allValues,
+      startAt: startDate,
+      endAt: endDate
+    }
+  }
+
   const loadDataFromApi = async (startDate: string, endDate: string) => {
     try {
       console.log('📊 [Context] loadDataFromApi start')
       console.log('📅 [Context] date range:', { startDate, endDate })
       
-      // Get clinic ID from the API connection
-      const clinicId = state.apiKey || 'default'
+      // Get clinic ID from the current clinic
+      const clinicId = state.currentClinic?.id || state.apiKey || 'default'
       
       // Start progress tracking
       dispatch({
@@ -298,80 +378,218 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }
       })
       
-      // Use 2-year cached data system
-      let dailyAccountsData
-      try {
-        console.log('🔄 [Context] Trying 2-year cached request')
+      // Load 14 months of data from all 4 clinics
+      let allClinicData = []
+      const clinicConfigs = [
+        { id: 'yokohama', name: '横浜院' },
+        { id: 'koriyama', name: '郡山院' },
+        { id: 'mito', name: '水戸院' },
+        { id: 'omiya', name: '大宮院' }
+      ]
+
+      // Calculate 14 months date range
+      const endDateObj = new Date(endDate)
+      const fourteenMonthsAgo = new Date(endDateObj)
+      fourteenMonthsAgo.setMonth(fourteenMonthsAgo.getMonth() - 14)
+      
+      const fourteenMonthStartDate = fourteenMonthsAgo.toISOString().split('T')[0]
+      const fourteenMonthEndDate = endDateObj.toISOString().split('T')[0]
+      
+      console.log('📅 [Context] 14-month date range:', { 
+        fourteenMonthStartDate, 
+        fourteenMonthEndDate 
+      })
+
+      // Load data from all clinics with proper authentication - MONTHLY LOADING
+      for (let i = 0; i < clinicConfigs.length; i++) {
+        const clinic = clinicConfigs[i]
         
-        // Create progress callback
-        const onProgress = (progress: { currentStep: string, currentStepNumber: number, totalSteps: number, percentage: number }) => {
-          dispatch({
-            type: 'SET_PROGRESS',
-            payload: {
-              isActive: true,
-              currentStep: progress.currentStep,
-              totalSteps: progress.totalSteps,
-              currentStepNumber: progress.currentStepNumber,
-              percentage: progress.percentage
-            }
-          })
-        }
-        
-        dailyAccountsData = await api.getTwoYearData(clinicId, onProgress)
-        console.log('✅ [Context] 2-year cached request OK')
-      } catch (error) {
-        console.warn('⚠️ [Context] 2-year cached request failed, fallback to 6 months:', error)
-        
-        // Update progress for fallback
         dispatch({
           type: 'SET_PROGRESS',
           payload: {
             isActive: true,
-            currentStep: '2年データ取得に失敗、6ヶ月データに切り替え中...',
-            totalSteps: 1,
-            currentStepNumber: 1,
-            percentage: 50
+            currentStep: `${clinic.name}のデータを月別で取得中... (${i + 1}/4)`,
+            totalSteps: 4,
+            currentStepNumber: i + 1,
+            percentage: ((i + 1) / 4) * 100
           }
         })
-        
-        // Fallback to 6 months if 2-year request fails
-        const endDateObj = new Date(endDate)
-        const sixMonthsAgo = new Date(endDateObj)
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-        
-        const sixMonthStartDate = sixMonthsAgo.toISOString().split('T')[0]
-        const sixMonthEndDate = endDateObj.toISOString().split('T')[0]
-        
-        console.log('📅 [Context] Fallback 6-month date range:', { 
-          sixMonthStartDate, 
-          sixMonthEndDate 
-        })
-        console.log('⏳ [Context] Requesting 6-month data...')
-        
-        dailyAccountsData = await api.getDailyAccounts(sixMonthStartDate, sixMonthEndDate)
-        console.log('✅ [Context] 6-month request OK')
+
+        try {
+          console.log(`🔄 [Context] Authenticating and loading data for ${clinic.name}...`)
+          
+          // Create a new API instance for this clinic with its specific credentials
+          const clinicApi = new MedicalForceAPI()
+          clinicApi.setClinicCredentials(clinic.id)
+          
+          // Wait a moment for credentials to be set
+          await new Promise(resolve => setTimeout(resolve, 100))
+          
+          // Load data monthly to avoid large data issues
+          const clinicData = await loadMonthlyData(clinicApi, fourteenMonthStartDate, fourteenMonthEndDate, clinic.name)
+          
+          // DEBUG: Log raw API response
+          console.log(`🔍 [DEBUG] Raw API response for ${clinic.name}:`, {
+            clinicId: clinic.id,
+            rawResponse: clinicData,
+            responseType: typeof clinicData,
+            hasValues: Array.isArray(clinicData.values),
+            valuesLength: clinicData.values?.length || 0,
+            total: clinicData.total,
+            netTotal: clinicData.netTotal,
+            startAt: clinicData.startAt,
+            endAt: clinicData.endAt
+          })
+          
+          // DEBUG: Log sample records
+          if (clinicData.values && clinicData.values.length > 0) {
+            console.log(`🔍 [DEBUG] Sample records for ${clinic.name}:`, {
+              firstRecord: clinicData.values[0],
+              lastRecord: clinicData.values[clinicData.values.length - 1],
+              recordKeys: Object.keys(clinicData.values[0] || {}),
+              sampleDates: clinicData.values.slice(0, 5).map(r => r.recordDate),
+              sampleRevenue: clinicData.values.slice(0, 5).map(r => r.totalWithTax)
+            })
+          } else {
+            console.warn(`⚠️ [DEBUG] No data values found for ${clinic.name}`)
+          }
+          
+          // Add clinic information to each record
+          const clinicDataWithInfo = {
+            ...clinicData,
+            values: clinicData.values.map(record => ({
+              ...record,
+              clinicId: clinic.id,
+              clinicName: clinic.name
+            }))
+          }
+          
+          allClinicData.push(clinicDataWithInfo)
+          console.log(`✅ [Context] ${clinic.name} data loaded successfully:`, {
+            clinicId: clinic.id,
+            total: clinicData.total,
+            valuesCount: clinicData.values.length,
+            processedValuesCount: clinicDataWithInfo.values.length
+          })
+        } catch (error) {
+          console.error(`❌ [Context] Failed to load data for ${clinic.name}:`, error)
+          console.error(`Error details:`, {
+            clinicId: clinic.id,
+            clinicName: clinic.name,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          
+          // Add empty data for failed clinic to maintain structure
+          allClinicData.push({
+            clinicId: clinic.id,
+            clinicName: clinic.name,
+            total: 0,
+            netTotal: 0,
+            values: []
+          })
+        }
       }
-      
-      console.log('✅ [Context] Daily accounts data loaded:', {
-        clinicId: dailyAccountsData.clinicId,
-        total: dailyAccountsData.total,
-        netTotal: dailyAccountsData.netTotal,
-        valuesCount: dailyAccountsData.values.length
+
+      // Store data separately for each clinic
+      const clinicData = {
+        yokohama: { dailyAccounts: [] as any[], patients: [] as any[], accounting: [] as any[] },
+        koriyama: { dailyAccounts: [] as any[], patients: [] as any[], accounting: [] as any[] },
+        mito: { dailyAccounts: [] as any[], patients: [] as any[], accounting: [] as any[] },
+        omiya: { dailyAccounts: [] as any[], patients: [] as any[], accounting: [] as any[] }
+      }
+
+      // Process each clinic's data separately
+      allClinicData.forEach((clinicDataItem, index) => {
+        const clinic = clinicConfigs[index]
+        if (clinic && clinicDataItem.values) {
+          console.log(`🔍 [DEBUG] Processing data for ${clinic.name}:`, {
+            clinicId: clinic.id,
+            originalValuesCount: clinicDataItem.values.length,
+            sampleRecord: clinicDataItem.values[0],
+            dateRange: {
+              first: clinicDataItem.values[0]?.recordDate,
+              last: clinicDataItem.values[clinicDataItem.values.length - 1]?.recordDate
+            }
+          })
+          
+          const processedPatients = dataProcessor.processDailyAccountsToPatients(clinicDataItem)
+          const processedAccounting = dataProcessor.processDailyAccountsToAccounting(clinicDataItem)
+          
+          console.log(`🔍 [DEBUG] Processed data for ${clinic.name}:`, {
+            dailyAccountsCount: clinicDataItem.values.length,
+            patientsCount: processedPatients.length,
+            accountingCount: processedAccounting.length,
+            samplePatient: processedPatients[0],
+            sampleAccounting: processedAccounting[0]
+          })
+          
+          clinicData[clinic.id as keyof typeof clinicData] = {
+            dailyAccounts: clinicDataItem.values,
+            patients: processedPatients,
+            accounting: processedAccounting
+          }
+        } else {
+          console.warn(`⚠️ [DEBUG] No data to process for ${clinic?.name || 'unknown clinic'}`)
+        }
       })
 
-      // Process daily accounts data into patient and accounting data for compatibility
-      const processedPatients = dataProcessor.processDailyAccountsToPatients(dailyAccountsData)
-      const processedAccounting = dataProcessor.processDailyAccountsToAccounting(dailyAccountsData)
+      // Create combined data for analysis only
+      const combinedData = {
+        clinicId: 'all',
+        clinicName: '全院',
+        total: allClinicData.reduce((sum, data) => sum + (data.total || 0), 0),
+        netTotal: allClinicData.reduce((sum, data) => sum + (data.netTotal || 0), 0),
+        values: allClinicData.flatMap(data => data.values || [])
+      }
 
-      // Calculate current month metrics directly from daily accounts data
-      const currentMonthVisitCount = dataProcessor.calculateCurrentMonthVisitCount(dailyAccountsData)
-      const currentMonthAccountingUnitPrice = dataProcessor.calculateCurrentMonthAccountingUnitPrice(dailyAccountsData)
-      const currentMonthRevenue = dataProcessor.calculateCurrentMonthRevenue(dailyAccountsData)
+      console.log('✅ [Context] Clinic data stored separately:', {
+        totalClinics: allClinicData.length,
+        yokohamaRecords: clinicData.yokohama.dailyAccounts.length,
+        koriyamaRecords: clinicData.koriyama.dailyAccounts.length,
+        mitoRecords: clinicData.mito.dailyAccounts.length,
+        omiyaRecords: clinicData.omiya.dailyAccounts.length,
+        totalCombinedRecords: combinedData.values.length
+      })
+      
+      console.log('✅ [Context] Combined daily accounts data loaded:', {
+        clinicId: combinedData.clinicId,
+        total: combinedData.total,
+        netTotal: combinedData.netTotal,
+        valuesCount: combinedData.values.length
+      })
 
-      // Calculate trend data from daily accounts data
-      const monthlyTrends = dataProcessor.calculateMonthlyTrends(dailyAccountsData)
-      const dailyTrends = dataProcessor.calculateDailyTrends(dailyAccountsData, 30)
-      const yearOverYearComparison = dataProcessor.calculateYearOverYearComparison(dailyAccountsData)
+      // Process combined daily accounts data into patient and accounting data for compatibility
+      const processedPatients = dataProcessor.processDailyAccountsToPatients(combinedData)
+      const processedAccounting = dataProcessor.processDailyAccountsToAccounting(combinedData)
+
+      // Calculate current month metrics directly from combined daily accounts data
+      const currentMonthVisitCount = dataProcessor.calculateCurrentMonthVisitCount(combinedData)
+      const currentMonthAccountingUnitPrice = dataProcessor.calculateCurrentMonthAccountingUnitPrice(combinedData)
+      const currentMonthRevenue = dataProcessor.calculateCurrentMonthRevenue(combinedData)
+
+      // Calculate trend data from combined daily accounts data
+      const monthlyTrends = dataProcessor.calculateMonthlyTrends(combinedData)
+      const dailyTrends = dataProcessor.calculateDailyTrends(combinedData, 30)
+      const yearOverYearComparison = dataProcessor.calculateYearOverYearComparison(combinedData)
+
+      // DEBUG: Log final data structure before dispatch
+      console.log(`🔍 [DEBUG] Final data structure before dispatch:`, {
+        combinedData: {
+          totalRecords: combinedData.values.length,
+          totalRevenue: combinedData.total,
+          sampleRecord: combinedData.values[0]
+        },
+        clinicData: {
+          yokohama: { dailyAccounts: clinicData.yokohama.dailyAccounts.length, patients: clinicData.yokohama.patients.length, accounting: clinicData.yokohama.accounting.length },
+          koriyama: { dailyAccounts: clinicData.koriyama.dailyAccounts.length, patients: clinicData.koriyama.patients.length, accounting: clinicData.koriyama.accounting.length },
+          mito: { dailyAccounts: clinicData.mito.dailyAccounts.length, patients: clinicData.mito.patients.length, accounting: clinicData.mito.accounting.length },
+          omiya: { dailyAccounts: clinicData.omiya.dailyAccounts.length, patients: clinicData.omiya.patients.length, accounting: clinicData.omiya.accounting.length }
+        },
+        processedData: {
+          patientsCount: processedPatients.length,
+          accountingCount: processedAccounting.length
+        }
+      })
 
       dispatch({
         type: 'SET_DATA',
@@ -381,7 +599,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           appointments: [], // Not available in daily accounts
           services: [], // Not available in daily accounts
           brandCourses: [], // Not available in daily accounts
-          dailyAccounts: dailyAccountsData.values
+          dailyAccounts: combinedData.values,
+          clinicData: clinicData
         }
       })
 
@@ -406,7 +625,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       })
 
       // Calculate and store demographics data
-      const demographics = dataProcessor.calculateDemographics(dailyAccountsData)
+      const demographics = dataProcessor.calculateDemographics(combinedData)
       dispatch({
         type: 'SET_DEMOGRAPHICS',
         payload: demographics
@@ -415,7 +634,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       console.log('✅ [Context] Data processing completed:', {
         patientsCount: processedPatients.length,
         accountingCount: processedAccounting.length,
-        dailyAccountsCount: dailyAccountsData.values.length,
+        dailyAccountsCount: combinedData.values.length,
         currentMonthVisitCount,
         currentMonthAccountingUnitPrice,
         currentMonthRevenue
@@ -496,31 +715,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     await loadData()
   }
 
-  const searchServices = async (clinicId: string, date: string) => {
-    if (!state.apiConnected || state.dataSource !== 'api') {
-      throw new Error('APIが接続されていません')
-    }
-
-    try {
-      dispatch({ type: 'SET_LOADING', payload: true })
-      dispatch({ type: 'SET_ERROR', payload: null })
-
-      const results = await api.getUpdatedBrandCourses(clinicId, date)
-      
-      // Store the results in state for ServicesAnalysis component
-      dispatch({ type: 'SET_SERVICE_SEARCH_RESULTS', payload: results })
-      
-      return results
-    } catch (error) {
-      dispatch({
-        type: 'SET_ERROR',
-        payload: error instanceof Error ? error.message : '役務検索に失敗しました'
-      })
-      throw error
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false })
-    }
-  }
 
   return (
     <DashboardContext.Provider value={{ 
@@ -528,15 +722,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       dispatch, 
       connectToApi, 
       loadData, 
-      refreshData,
-      searchServices
+      refreshData
     }}>
       {children}
     </DashboardContext.Provider>
   )
 }
 
-// Hook
+// Hook - Dashboard context hook
 export function useDashboard() {
   const context = useContext(DashboardContext)
   if (!context) {

@@ -1,9 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Database, Key, Search } from 'lucide-react'
-import ServiceSearchResults from './ServiceSearchResults'
-import { useDashboard } from '../contexts/DashboardContext'
+import { X, Database, Key } from 'lucide-react'
 
 interface ApiConnectionProps {
   isOpen: boolean
@@ -14,26 +12,23 @@ interface ApiConnectionProps {
 interface ApiConfig {
   clientId: string
   clientSecret: string
-  // Service search parameters
-  clinicId?: string
-  serviceSearchDate?: string,
   grant_type: string
+  clinicId: string
+  clinicName: string
 }
 
 export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnectionProps) {
-  const { searchServices } = useDashboard()
   const [config, setConfig] = useState<ApiConfig>({
-    clientId: '74kgoefn8h2pbslk8qo50j99to',
-    clientSecret: '1r19ivhqj4tsmqbs75m03vm6fk9iedk63n52b0n7og77lt9d56g0',
-    grant_type: "client_credentials"
+    clientId: 'all-clinics',
+    clientSecret: 'all-clinics',
+    grant_type: "client_credentials",
+    clinicId: 'all',
+    clinicName: '全院'
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [quickConnect, setQuickConnect] = useState(false)
-  const [serviceSearchResults, setServiceSearchResults] = useState<any[]>([])
-  const [showServiceResults, setShowServiceResults] = useState(false)
-  const [serviceSearchLoading, setServiceSearchLoading] = useState(false)
-  const [serviceSearchError, setServiceSearchError] = useState<string | null>(null)
+
 
   const handleQuickConnect = async () => {
     setError(null)
@@ -73,48 +68,6 @@ export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnect
   }
 
 
-  const handleServiceSearch = async () => {
-    console.log('🔍 [Component] Service search initiated')
-    console.log('📤 [Component] Search parameters:', {
-      clinicId: config.clinicId,
-      serviceSearchDate: config.serviceSearchDate
-    })
-
-    if (!config.clinicId || !config.serviceSearchDate) {
-      console.error('❌ [Component] Missing required parameters')
-      setServiceSearchError('クリニックIDと更新日を入力してください')
-      return
-    }
-
-    console.log('⏳ [Component] Setting loading state...')
-    setServiceSearchLoading(true)
-    setServiceSearchError(null)
-
-    try {
-      console.log('🌐 [Component] Calling searchServices...')
-      const results = await searchServices(config.clinicId, config.serviceSearchDate)
-      console.log('✅ [Component] Search results received:', {
-        resultsType: typeof results,
-        isArray: Array.isArray(results),
-        length: Array.isArray(results) ? results.length : 'not array',
-        sampleResult: Array.isArray(results) && results.length > 0 ? results[0] : results
-      })
-      
-      setServiceSearchResults(results)
-      setShowServiceResults(true)
-      console.log('✅ [Component] Service search completed successfully')
-    } catch (err) {
-      console.error('❌ [Component] Service search failed:')
-      console.error('Error type:', err instanceof Error ? err.constructor.name : typeof err)
-      console.error('Error message:', err instanceof Error ? err.message : String(err))
-      console.error('Error stack:', err instanceof Error ? err.stack : 'No stack trace')
-      
-      setServiceSearchError(err instanceof Error ? err.message : '役務検索に失敗しました')
-    } finally {
-      console.log('⏹️ [Component] Setting loading state to false')
-      setServiceSearchLoading(false)
-    }
-  }
 
   if (!isOpen) return null
 
@@ -138,6 +91,7 @@ export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnect
             </div>
           )}
 
+
           {/* Quick Connect Section */}
           <div className="p-4 border border-green-200 rounded-lg bg-green-50">
             <div className="flex items-center mb-3 space-x-3">
@@ -146,13 +100,14 @@ export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnect
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-green-900">クイック接続</h3>
-                <p className="text-sm text-green-700">Medical Force APIにBearer Tokenで自動接続</p>
+                <p className="text-sm text-green-700">全クリニックのデータを自動取得</p>
               </div>
             </div>
             
             <div className="space-y-3">
               <div className="text-sm text-gray-600">
-                <p><strong>認証:</strong> Bearer Token (Client ID: 74kgoefn8h2pbslk8qo50j99to)</p>
+                <p><strong>対象:</strong> 横浜院・郡山院・水戸院・大宮院 (全4院)</p>
+                <p><strong>期間:</strong> 過去14ヶ月のデータ</p>
                 <p><strong>データソース:</strong> Medical Force API</p>
               </div>
               
@@ -170,7 +125,7 @@ export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnect
                 ) : (
                   <>
                     <Database className="w-4 h-4" />
-                    <span>クイック接続</span>
+                    <span>全クリニックに接続</span>
                   </>
                 )}
               </button>
@@ -226,73 +181,6 @@ export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnect
               </div>
 
 
-              {/* Service Search */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  <Database className="inline w-5 h-5 mr-2" />
-                  役務検索（更新日で検索）
-                </h3>
-                
-                <div className="p-3 border border-blue-200 rounded-md bg-blue-50">
-                  <p className="text-sm text-blue-800">
-                    <strong>役務検索:</strong> Medical Force APIのBearer Tokenを使用して、クリニックIDと更新日を指定して役務（コース）情報を検索します。
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
-                    <label htmlFor="clinicId" className="block mb-2 text-sm font-medium text-gray-700">
-                      クリニックID
-                    </label>
-                    <input
-                      id="clinicId"
-                      type="text"
-                      value={config.clinicId || ''}
-                      onChange={(e) => setConfig(prev => ({ ...prev, clinicId: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="クリニックIDを入力してください"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="serviceSearchDate" className="block mb-2 text-sm font-medium text-gray-700">
-                      更新日
-                    </label>
-                    <input
-                      id="serviceSearchDate"
-                      type="date"
-                      value={config.serviceSearchDate || ''}
-                      onChange={(e) => setConfig(prev => ({ ...prev, serviceSearchDate: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                
-                {serviceSearchError && (
-                  <div className="p-3 border border-red-200 rounded-md bg-red-50">
-                    <p className="text-sm text-red-800">{serviceSearchError}</p>
-                  </div>
-                )}
-                
-                <button
-                  type="button"
-                  onClick={handleServiceSearch}
-                  disabled={serviceSearchLoading || !config.clinicId || !config.serviceSearchDate}
-                  className="flex items-center justify-center w-full px-4 py-3 space-x-2 font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {serviceSearchLoading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
-                      <span>検索中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4" />
-                      <span>役務を検索</span>
-                    </>
-                  )}
-                </button>
-              </div>
 
               {/* Action Buttons */}
               <div className="flex justify-end pt-6 space-x-3 border-t border-gray-200">
@@ -316,15 +204,6 @@ export default function ApiConnection({ isOpen, onClose, onConnect }: ApiConnect
           </div>
         </div>
       </div>
-      
-      {/* Service Search Results Modal */}
-      <ServiceSearchResults
-        isOpen={showServiceResults}
-        onClose={() => setShowServiceResults(false)}
-        results={serviceSearchResults}
-        loading={serviceSearchLoading}
-        error={serviceSearchError}
-      />
     </div>
   )
 }

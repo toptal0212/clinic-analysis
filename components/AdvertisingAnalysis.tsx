@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { useDashboard } from '@/contexts/DashboardContext'
+import { useDashboard } from '@/contexts'
 import { advertisingAPI } from '@/lib/advertisingAPI'
 import { 
   BarChart3,

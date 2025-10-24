@@ -3,7 +3,7 @@ import { MedicalForceClinic, MedicalForceService, MedicalForceUpdatedBrandCourse
 
 export class MedicalForceAPI {
   private baseURL: string
-  private cacheVersion: string = 'v4' // bump to invalidate cache after adding aliases
+  private cacheVersion: string = 'v5' // store raw origin records in cache
   private clientId: string | null = null
   private clientSecret: string | null = null
   private accessToken: string | null = null
@@ -22,6 +22,28 @@ export class MedicalForceAPI {
     this.clientSecret = clientSecret
     this.accessToken = null
     this.tokenExpiry = null
+  }
+
+  // Set clinic-specific credentials
+  setClinicCredentials(clinicId: string) {
+    const clinicConfigs = {
+      'yokohama': { clientId: '56ensn75gfosp2d40jp9vk6h8j', clientSecret: '1npprack1mkd80ilvi1rcjsdqjvcv10qbr2qgeq463cv6rdqkh78' },
+      'koriyama': { clientId: '5akls28bqmv28e2buaujbaaa4t', clientSecret: '18b6qdklg7gktn9rd31ru5q4gb4svhitkvfi714k81ai3ksip0vl' },
+      'mito': { clientId: '5t4crevvhpl55ko383c0jumnpb', clientSecret: '1ubu2qqujd4eqakat85iu4h97k8ogu6orut6s08kgr98f9cuk4gb' },
+      'omiya': { clientId: '74kgoefn8h2pbslk8qo50j99to', clientSecret: '1r19ivhqj4tsmqbs75m03vm6fk9iedk63n52b0n7og77lt9d56g0' }
+    }
+
+    const clinicConfig = clinicConfigs[clinicId as keyof typeof clinicConfigs]
+    if (clinicConfig) {
+      this.setClientCredentials(clinicConfig.clientId, clinicConfig.clientSecret)
+      console.log(`🏥 [API] Switched to ${clinicId} credentials:`, {
+        clientId: clinicConfig.clientId.substring(0, 8) + '...',
+        clientSecret: clinicConfig.clientSecret.substring(0, 8) + '...'
+      })
+    } else {
+      console.warn(`⚠️ [API] Unknown clinic ID: ${clinicId}`)
+      throw new Error(`Unknown clinic ID: ${clinicId}`)
+    }
   }
 
   // Get token status for debugging
@@ -253,15 +275,22 @@ export class MedicalForceAPI {
   }
 
   // Get daily accounts data (日計表データ)
-  async getDailyAccounts(epochFrom: string, epochTo: string): Promise<DailyAccountsResponse> {
+  async getDailyAccounts(epochFrom: string, epochTo: string, clinicId?: string): Promise<DailyAccountsResponse> {
     console.log('📊 [API] Getting daily accounts...')
     console.log('📅 [API] Date range:', { epochFrom, epochTo })
+    console.log('🏥 [API] Clinic ID:', clinicId || 'default')
     
-    // Get the access token
-    const token = await this.getAccessToken()
-    console.log('✅ [API] Access token obtained for daily accounts request')
+    // If clinicId is provided, temporarily switch credentials
+    let originalCredentials = null
+    if (clinicId) {
+      originalCredentials = { clientId: this.clientId, clientSecret: this.clientSecret }
+      this.setClinicCredentials(clinicId)
+    }
     
     try {
+      // Get the access token
+      const token = await this.getAccessToken()
+      console.log('✅ [API] Access token obtained for daily accounts request')
       const url = `/api/daily-accounts?epoch_from=${epochFrom}&epoch_to=${epochTo}`
       console.log('🌐 [API] Making request to:', url)
       
@@ -278,10 +307,17 @@ export class MedicalForceAPI {
       console.log('📥 [API] Daily accounts response ok:', response.ok)
 
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('❌ [API] Daily accounts API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          clinicId: clinicId || 'default',
+          url
+        })
+        
         if (response.status === 401) {
-          const errorData = await response.json().catch(() => ({}))
-          console.warn('⚠️ [API] Token expired, attempting to refresh...')
-          console.log('Error data:', errorData)
+          console.warn('⚠️ [API] Authentication failed, attempting to refresh...')
           
           // Clear current token and try to get a new one
           this.accessToken = null
@@ -308,7 +344,7 @@ export class MedicalForceAPI {
             if (!retryResponse.ok) {
               const retryErrorData = await retryResponse.json().catch(() => ({}))
               console.error('❌ [API] Daily accounts retry failed:', retryErrorData)
-              throw new Error(`認証エラー: ${retryErrorData.error || 'Your token is invalid'}`)
+              throw new Error(`認証エラー (${clinicId || 'default'}): ${retryErrorData.error || 'Authentication failed'}`)
             }
             
             const retryData = await retryResponse.json()
@@ -316,13 +352,13 @@ export class MedicalForceAPI {
             return retryData
           } catch (refreshError) {
             console.error('❌ [API] Token refresh failed for daily accounts:', refreshError)
-            throw new Error(`認証エラー: ${errorData.error || 'Your token is invalid'}`)
+            throw new Error(`認証エラー (${clinicId || 'default'}): ${errorData.error || 'Authentication failed'}`)
           }
+        } else if (response.status === 502) {
+          throw new Error(`サーバーエラー (${clinicId || 'default'}): 502 Bad Gateway - サーバーが一時的に利用できません`)
+        } else {
+          throw new Error(`API Error (${clinicId || 'default'}): ${response.status} ${response.statusText} - ${errorData.error || 'Unknown error'}`)
         }
-        
-        const errorData = await response.json().catch(() => ({}))
-        console.error('❌ [API] Daily accounts API Error:', errorData)
-        throw new Error(`API Error: ${errorData.error || response.statusText}`)
       }
 
       const data = await response.json()
@@ -336,6 +372,32 @@ export class MedicalForceAPI {
         endAt: data.endAt
       })
       
+      // DEBUG: Detailed API response logging
+      console.log('🔍 [API DEBUG] Full API response structure:', {
+        responseKeys: Object.keys(data),
+        dataType: typeof data,
+        valuesType: typeof data.values,
+        isValuesArray: Array.isArray(data.values),
+        valuesLength: data.values?.length || 0,
+        sampleValue: data.values?.[0],
+        sampleValueKeys: data.values?.[0] ? Object.keys(data.values[0]) : 'no values'
+      })
+      
+      // DEBUG: Log first few records in detail
+      if (data.values && data.values.length > 0) {
+        console.log('🔍 [API DEBUG] First 3 records:', data.values.slice(0, 3))
+        console.log('🔍 [API DEBUG] Record field analysis:', {
+          recordDate: data.values[0]?.recordDate,
+          visitorName: data.values[0]?.visitorName,
+          treatmentName: data.values[0]?.treatmentName,
+          totalWithTax: data.values[0]?.totalWithTax,
+          netTotal: data.values[0]?.netTotal,
+          allFields: Object.keys(data.values[0] || {})
+        })
+      } else {
+        console.warn('⚠️ [API DEBUG] No values in API response')
+      }
+      
       return data
     } catch (error) {
       console.error('❌ [API] Daily accounts API request failed:')
@@ -343,6 +405,12 @@ export class MedicalForceAPI {
       console.error('Error message:', error instanceof Error ? error.message : String(error))
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
       throw error
+    } finally {
+      // Restore original credentials if they were changed
+      if (originalCredentials && originalCredentials.clientId && originalCredentials.clientSecret) {
+        this.setClientCredentials(originalCredentials.clientId, originalCredentials.clientSecret)
+        console.log('🔄 [API] Restored original credentials')
+      }
     }
   }
 
@@ -668,43 +736,12 @@ export class MedicalForceAPI {
     }
   }
 
-  // Compress data for storage (simple approach)
+  // Store origin API format in cache (no compression/mapping)
   private compressData(data: any): any {
     try {
-      // Keep only essential fields + minimal treatment/staff for UI
-      return data.map((item: any) => {
-        const firstItem = Array.isArray(item.paymentItems) && item.paymentItems.length > 0 ? item.paymentItems[0] : undefined
-        const result = {
-          visitorId: item.visitorId,
-          visitorName: item.visitorName,
-          visitorAge: item.visitorAge,
-          visitorGender: item.visitorGender,
-          visitorInflowSourceName: item.visitorInflowSourceName,
-          isFirst: item.isFirst,
-          recordDate: item.recordDate,
-          totalWithTax: item.totalWithTax,
-          netTotal: item.netTotal,
-          methodPrice: item.methodPrice,
-          otherDiscountPrice: item.otherDiscountPrice,
-          note: item.note,
-          // Minimal fields for 施術内容/担当者 抽出
-          reservationStaffName: item.reservationStaffName || null,
-          firstPaymentItemName: firstItem?.name || null,
-          firstPaymentItemCategory: firstItem?.category || null,
-          firstPaymentItemMainStaffName: firstItem?.mainStaffName || null,
-          paymentItemsLength: Array.isArray(item.paymentItems) ? item.paymentItems.length : 0
-        } as any
-
-        // Aliases required by UI spec
-        // 施術 = category, 施術内容 = name, 担当者 = (要望に合わせて) name
-        result.treatment = firstItem?.category || null // 施術
-        result.treatmentName = firstItem?.name || null // 施術内容
-        result.staff = firstItem?.name || null // 担当者（要求どおり name を設定）
-
-        return result
-      })
+      return data
     } catch (error) {
-      console.error('❌ [Cache] Error compressing data:', error)
+      console.error('❌ [Cache] Error preparing data for cache:', error)
       return data
     }
   }
@@ -971,94 +1008,136 @@ export class DataProcessor {
 
   // Categorize treatment into hierarchical structure
   categorizeTreatment(treatmentCategory: string, treatmentName: string) {
-    const categories = {
-      BEAUTY: {
-        name: '美容',
-        subcategories: {
-          SURGERY: {
-            name: '外科',
-            procedures: [
-              '二重', 'くま治療', '糸リフト', '小顔（S,BF)', 
-              '鼻・人中手術', 'ボディー脂肪吸引', '豊胸', 'その他外科'
-            ]
-          },
-          DERMATOLOGY: {
-            name: '皮膚科',
-            procedures: ['注入', 'スキン']
-          },
-          HAIR_REMOVAL: {
-            name: '脱毛',
-            procedures: ['脱毛']
-          }
-        }
-      },
-      OTHER: {
-        name: 'その他',
-        subcategories: {
-          PIERCING: { name: 'ピアス', procedures: ['ピアス'] },
-          PRODUCTS: { name: '物販', procedures: ['物販'] },
-          ANESTHESIA: { name: '麻酔・針・パック', procedures: ['麻酔・針・パック'] }
-        }
+    const name = treatmentName.toLowerCase()
+    
+    // Surgery category mappings
+    if (name.includes('二重') || name.includes('double') || name.includes('eyelid')) {
+      return {
+        main: '外科',
+        sub: '二重',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    if (name.includes('くま') || name.includes('dark') || name.includes('circle')) {
+      return {
+        main: '外科',
+        sub: 'くま治療',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    if (name.includes('糸') || name.includes('thread') || name.includes('lift')) {
+      return {
+        main: '外科',
+        sub: '糸リフト',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    if (name.includes('小顔') || name.includes('face') || name.includes('slimming')) {
+      return {
+        main: '外科',
+        sub: '小顔（S,BF)',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    if (name.includes('鼻') || name.includes('人中') || name.includes('nose') || name.includes('philtrum')) {
+      return {
+        main: '外科',
+        sub: '鼻・人中手術',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    if (name.includes('脂肪吸引') || name.includes('liposuction') || name.includes('body')) {
+      return {
+        main: '外科',
+        sub: 'ボディー脂肪吸引',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    if (name.includes('豊胸') || name.includes('breast') || name.includes('augmentation')) {
+      return {
+        main: '外科',
+        sub: '豊胸',
+        procedure: treatmentName,
+        specialty: 'surgery'
       }
     }
     
-    // Check if it's a beauty treatment
-    if (categories.BEAUTY.subcategories.SURGERY.procedures.includes(treatmentName) ||
-        categories.BEAUTY.subcategories.DERMATOLOGY.procedures.includes(treatmentName) ||
-        categories.BEAUTY.subcategories.HAIR_REMOVAL.procedures.includes(treatmentName)) {
-      
-      if (categories.BEAUTY.subcategories.SURGERY.procedures.includes(treatmentName)) {
-        return {
-          main: '美容',
-          sub: '外科',
-          procedure: treatmentName
-        }
-      } else if (categories.BEAUTY.subcategories.DERMATOLOGY.procedures.includes(treatmentName)) {
-        return {
-          main: '美容',
-          sub: '皮膚科',
-          procedure: treatmentName
-        }
-      } else if (categories.BEAUTY.subcategories.HAIR_REMOVAL.procedures.includes(treatmentName)) {
-        return {
-          main: '美容',
-          sub: '脱毛',
-          procedure: treatmentName
-        }
+    // Dermatology category mappings
+    if (name.includes('注入') || name.includes('injection') || name.includes('ボトックス') || name.includes('ヒアルロン')) {
+      return {
+        main: '皮膚科',
+        sub: '注入',
+        procedure: treatmentName,
+        specialty: 'dermatology'
+      }
+    }
+    if (name.includes('スキン') || name.includes('skin') || name.includes('レーザー') || name.includes('laser')) {
+      return {
+        main: '皮膚科',
+        sub: 'スキン',
+        procedure: treatmentName,
+        specialty: 'dermatology'
       }
     }
     
-    // Check if it's an "other" treatment
-    if (categories.OTHER.subcategories.PIERCING.procedures.includes(treatmentName) ||
-        categories.OTHER.subcategories.PRODUCTS.procedures.includes(treatmentName) ||
-        categories.OTHER.subcategories.ANESTHESIA.procedures.includes(treatmentName)) {
-      
-      if (categories.OTHER.subcategories.PIERCING.procedures.includes(treatmentName)) {
-        return {
-          main: 'その他',
-          sub: 'ピアス',
-          procedure: treatmentName
-        }
-      } else if (categories.OTHER.subcategories.PRODUCTS.procedures.includes(treatmentName)) {
-        return {
-          main: 'その他',
-          sub: '物販',
-          procedure: treatmentName
-        }
-      } else if (categories.OTHER.subcategories.ANESTHESIA.procedures.includes(treatmentName)) {
-        return {
-          main: 'その他',
-          sub: '麻酔・針・パック',
-          procedure: treatmentName
-        }
+    // Hair removal category
+    if (name.includes('脱毛') || name.includes('hair') || name.includes('removal')) {
+      return {
+        main: '脱毛',
+        sub: '脱毛',
+        procedure: treatmentName,
+        specialty: 'hair_removal'
       }
     }
     
-    // Default to "その他" if not categorized
+    // Other category mappings
+    if (name.includes('ピアス') || name.includes('piercing')) {
+      return {
+        main: 'その他',
+        sub: 'ピアス',
+        procedure: treatmentName,
+        specialty: 'other'
+      }
+    }
+    if (name.includes('物販') || name.includes('product') || name.includes('商品')) {
+      return {
+        main: 'その他',
+        sub: '物販',
+        procedure: treatmentName,
+        specialty: 'other'
+      }
+    }
+    if (name.includes('麻酔') || name.includes('針') || name.includes('パック') || name.includes('anesthesia') || name.includes('needle') || name.includes('pack')) {
+      return {
+        main: 'その他',
+        sub: '麻酔・針・パック',
+        procedure: treatmentName,
+        specialty: 'other'
+      }
+    }
+    
+    // Default to surgery other if it contains surgical keywords
+    if (name.includes('手術') || name.includes('surgery') || name.includes('外科')) {
+      return {
+        main: '外科',
+        sub: 'その他外科',
+        procedure: treatmentName,
+        specialty: 'surgery'
+      }
+    }
+    
+    // Default to other products for unrecognized items
     return {
       main: 'その他',
-      sub: 'その他',
-      procedure: treatmentName
+      sub: '物販',
+      procedure: treatmentName,
+      specialty: 'other'
     }
   }
 
@@ -1616,6 +1695,297 @@ export class DataProcessor {
     })
     
     return { labels, visitCounts, revenues }
+  }
+
+  // Calculate specialty-specific metrics
+  calculateSpecialtyMetrics(dailyAccountsData: any[]) {
+    const specialties = {
+      surgery: { name: '外科', totalRevenue: 0, totalCount: 0, averageUnitPrice: 0 },
+      dermatology: { name: '皮膚科', totalRevenue: 0, totalCount: 0, averageUnitPrice: 0 },
+      hair_removal: { name: '脱毛', totalRevenue: 0, totalCount: 0, averageUnitPrice: 0 },
+      other: { name: 'その他', totalRevenue: 0, totalCount: 0, averageUnitPrice: 0 }
+    }
+
+    // Process each daily account record
+    dailyAccountsData.forEach(record => {
+      const treatment = this.categorizeTreatment(record.treatmentName || '', record.treatmentName || '')
+      const specialty = treatment.specialty as keyof typeof specialties
+      
+      if (specialty && specialties[specialty]) {
+        specialties[specialty].totalRevenue += (record.totalWithTax || 0)
+        specialties[specialty].totalCount += 1
+      }
+    })
+
+    // Calculate average unit prices
+    Object.keys(specialties).forEach(key => {
+      const specialty = specialties[key as keyof typeof specialties]
+      specialty.averageUnitPrice = specialty.totalCount > 0 ? specialty.totalRevenue / specialty.totalCount : 0
+    })
+
+    console.log('🏥 [DataProcessor] Specialty metrics calculated:', specialties)
+    
+    return specialties
+  }
+
+  // Calculate hierarchical treatment breakdown
+  calculateTreatmentHierarchy(dailyAccountsData: any[]) {
+    const hierarchy = {
+      surgery: {
+        name: '外科',
+        totalRevenue: 0,
+        totalCount: 0,
+        subcategories: {
+          '二重': { revenue: 0, count: 0 },
+          'くま治療': { revenue: 0, count: 0 },
+          '糸リフト': { revenue: 0, count: 0 },
+          '小顔（S,BF)': { revenue: 0, count: 0 },
+          '鼻・人中手術': { revenue: 0, count: 0 },
+          'ボディー脂肪吸引': { revenue: 0, count: 0 },
+          '豊胸': { revenue: 0, count: 0 },
+          'その他外科': { revenue: 0, count: 0 }
+        }
+      },
+      dermatology: {
+        name: '皮膚科',
+        totalRevenue: 0,
+        totalCount: 0,
+        subcategories: {
+          '注入': { revenue: 0, count: 0 },
+          'スキン': { revenue: 0, count: 0 }
+        }
+      },
+      hair_removal: {
+        name: '脱毛',
+        totalRevenue: 0,
+        totalCount: 0,
+        subcategories: {
+          '脱毛': { revenue: 0, count: 0 }
+        }
+      },
+      other: {
+        name: 'その他',
+        totalRevenue: 0,
+        totalCount: 0,
+        subcategories: {
+          'ピアス': { revenue: 0, count: 0 },
+          '物販': { revenue: 0, count: 0 },
+          '麻酔・針・パック': { revenue: 0, count: 0 }
+        }
+      }
+    }
+
+    // Process each daily account record
+    dailyAccountsData.forEach(record => {
+      // Get treatment category and name from database fields
+      const treatmentCategory = record.paymentItems?.[0]?.category || ''
+      const treatmentName = record.paymentItems?.[0]?.name || record.treatmentName || ''
+      
+      console.log('🔍 [DataProcessor] Processing record:', { 
+        treatmentCategory, 
+        treatmentName, 
+        totalWithTax: record.totalWithTax 
+      })
+      
+      // Import the new categorization function
+      const { categorizeTreatment } = require('./treatmentCategories')
+      const treatment = categorizeTreatment(treatmentCategory, treatmentName)
+      const specialty = treatment.specialty as keyof typeof hierarchy
+      const subcategory = treatment.subcategory
+      
+      if (specialty && hierarchy[specialty] && hierarchy[specialty].subcategories[subcategory as keyof typeof hierarchy[typeof specialty]['subcategories']]) {
+        const revenue = record.totalWithTax || 0
+        hierarchy[specialty].totalRevenue += revenue
+        hierarchy[specialty].totalCount += 1
+        const subcategoryData = hierarchy[specialty].subcategories[subcategory as keyof typeof hierarchy[typeof specialty]['subcategories']] as { revenue: number, count: number }
+        subcategoryData.revenue += revenue
+        subcategoryData.count += 1
+        
+        console.log('🔍 [DataProcessor] Categorized:', { 
+          specialty, 
+          subcategory, 
+          revenue, 
+          totalRevenue: hierarchy[specialty].totalRevenue 
+        })
+      }
+    })
+
+    console.log('📊 [DataProcessor] Treatment hierarchy calculated:', hierarchy)
+    
+    return hierarchy
+  }
+
+  // Calculate sales table metrics according to business rules
+  calculateSalesTableMetrics(dailyAccountsData: any[], targetMonth: string) {
+    console.log('📊 [DataProcessor] Calculating sales table metrics for month:', targetMonth)
+    
+    // Filter data for target month
+    const targetMonthData = dailyAccountsData.filter(record => {
+      const recordDate = new Date(record.visitDate || record.accountingDate)
+      const recordMonth = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`
+      return recordMonth === targetMonth
+    })
+
+    console.log('📊 [DataProcessor] Target month data count:', targetMonthData.length)
+
+    // Import the new categorization function
+    const { categorizeTreatment } = require('./treatmentCategories')
+    
+    // Separate patient data from "その他" items
+    const patientData = targetMonthData.filter(record => {
+      const treatmentCategory = record.paymentItems?.[0]?.category || ''
+      const treatmentName = record.paymentItems?.[0]?.name || record.treatmentName || ''
+      const treatment = categorizeTreatment(treatmentCategory, treatmentName)
+      return treatment.specialty !== 'other'
+    })
+
+    const otherData = targetMonthData.filter(record => {
+      const treatmentCategory = record.paymentItems?.[0]?.category || ''
+      const treatmentName = record.paymentItems?.[0]?.name || record.treatmentName || ''
+      const treatment = categorizeTreatment(treatmentCategory, treatmentName)
+      return treatment.specialty === 'other'
+    })
+
+    console.log('📊 [DataProcessor] Patient data count:', patientData.length)
+    console.log('📊 [DataProcessor] Other data count:', otherData.length)
+
+    // Calculate visit-based sales (上段)
+    const visitBasedSales = patientData.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+    
+    // Calculate payment-based sales (下段)
+    const paymentBasedSales = targetMonthData.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+
+    // Calculate patient counts (excluding "その他")
+    const newPatientCount = patientData.filter(record => record.isFirstVisit === true).length
+    const existingPatientCount = patientData.filter(record => record.isFirstVisit === false).length
+    const totalPatientCount = newPatientCount + existingPatientCount
+
+    // Calculate same-day unit prices (当日単価)
+    const sameDayNewSales = patientData
+      .filter(record => record.isFirstVisit === true)
+      .reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+    const sameDayNewUnitPrice = newPatientCount > 0 ? sameDayNewSales / newPatientCount : 0
+
+    const sameDayExistingSales = patientData
+      .filter(record => record.isFirstVisit === false)
+      .reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+    const sameDayExistingUnitPrice = existingPatientCount > 0 ? sameDayExistingSales / existingPatientCount : 0
+
+    // Calculate cross-month unit prices (新規単価)
+    // This requires looking at all payments for patients who visited in target month
+    const crossMonthNewSales = this.calculateCrossMonthSales(patientData.filter(record => record.isFirstVisit === true), dailyAccountsData)
+    const crossMonthNewUnitPrice = newPatientCount > 0 ? crossMonthNewSales / newPatientCount : 0
+
+    const crossMonthExistingSales = this.calculateCrossMonthSales(patientData.filter(record => record.isFirstVisit === false), dailyAccountsData)
+    const crossMonthExistingUnitPrice = existingPatientCount > 0 ? crossMonthExistingSales / existingPatientCount : 0
+
+    // Calculate "その他" metrics
+    const otherSales = otherData.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+    const otherCount = otherData.length
+    const otherUnitPrice = otherCount > 0 ? otherSales / otherCount : 0
+
+    const metrics = {
+      total: {
+        visitBasedSales, // 上段
+        paymentBasedSales, // 下段
+        patientCount: totalPatientCount,
+        unitPrice: totalPatientCount > 0 ? visitBasedSales / totalPatientCount : 0,
+        sameDayUnitPrice: totalPatientCount > 0 ? (sameDayNewSales + sameDayExistingSales) / totalPatientCount : 0
+      },
+      new: {
+        sales: sameDayNewSales,
+        count: newPatientCount,
+        unitPrice: sameDayNewUnitPrice,
+        sameDayUnitPrice: sameDayNewUnitPrice,
+        crossMonthSales: crossMonthNewSales,
+        crossMonthUnitPrice: crossMonthNewUnitPrice
+      },
+      existing: {
+        sales: sameDayExistingSales,
+        count: existingPatientCount,
+        unitPrice: sameDayExistingUnitPrice,
+        sameDayUnitPrice: sameDayExistingUnitPrice,
+        crossMonthSales: crossMonthExistingSales,
+        crossMonthUnitPrice: crossMonthExistingUnitPrice
+      },
+      other: {
+        sales: otherSales,
+        count: otherCount,
+        unitPrice: otherUnitPrice,
+        sameDayUnitPrice: otherUnitPrice
+      }
+    }
+
+    console.log('📊 [DataProcessor] Sales table metrics calculated:', metrics)
+    return metrics
+  }
+
+  // Calculate cross-month sales for patients
+  calculateCrossMonthSales(patientRecords: any[], allDailyAccounts: any[]) {
+    let totalCrossMonthSales = 0
+    
+    patientRecords.forEach(patientRecord => {
+      // Find all payments for this patient across all months
+      const patientId = patientRecord.patientId || patientRecord.customerId
+      if (!patientId) return
+
+      const allPatientPayments = allDailyAccounts.filter(record => 
+        (record.patientId || record.customerId) === patientId
+      )
+
+      // Sum all payments for this patient
+      const patientTotalSales = allPatientPayments.reduce((sum, record) => 
+        sum + (record.totalWithTax || 0), 0
+      )
+
+      totalCrossMonthSales += patientTotalSales
+    })
+
+    return totalCrossMonthSales
+  }
+
+  // Get combined data from all clinics for analysis
+  getCombinedDataForAnalysis(clinicData: any) {
+    const allDailyAccounts = [
+      ...clinicData.yokohama.dailyAccounts,
+      ...clinicData.koriyama.dailyAccounts,
+      ...clinicData.mito.dailyAccounts,
+      ...clinicData.omiya.dailyAccounts
+    ]
+
+    const allPatients = [
+      ...clinicData.yokohama.patients,
+      ...clinicData.koriyama.patients,
+      ...clinicData.mito.patients,
+      ...clinicData.omiya.patients
+    ]
+
+    const allAccounting = [
+      ...clinicData.yokohama.accounting,
+      ...clinicData.koriyama.accounting,
+      ...clinicData.mito.accounting,
+      ...clinicData.omiya.accounting
+    ]
+
+    return {
+      dailyAccounts: allDailyAccounts,
+      patients: allPatients,
+      accounting: allAccounting,
+      total: allDailyAccounts.reduce((sum, record) => sum + (record.totalWithTax || 0), 0),
+      netTotal: allDailyAccounts.reduce((sum, record) => sum + (record.netTotal || 0), 0)
+    }
+  }
+
+  // Get clinic-specific data
+  getClinicData(clinicData: any, clinicId: string) {
+    const clinicMap = {
+      'yokohama': clinicData.yokohama,
+      'koriyama': clinicData.koriyama,
+      'mito': clinicData.mito,
+      'omiya': clinicData.omiya
+    }
+
+    return clinicMap[clinicId as keyof typeof clinicMap] || { dailyAccounts: [], patients: [], accounting: [] }
   }
 
   // Validate data integrity

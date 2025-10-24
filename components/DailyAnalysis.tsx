@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { useDashboard } from '@/contexts/DashboardContext'
+import { useDashboard } from '@/contexts'
 import { CalculationEngine } from '@/lib/calculationEngine'
 import { RevenueMetrics } from '@/lib/dataTypes'
 import { 
@@ -25,12 +25,55 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
   const calculationEngine = new CalculationEngine()
 
   const dailyData = useMemo(() => {
-    if (!state.apiConnected || !state.data.dailyAccounts.length) return []
+    // Generate sample data if no real data is available
+    if (!state.apiConnected || !state.data.dailyAccounts.length) {
+      console.log('🔍 [DEBUG] DailyAnalysis - Using sample data')
+      const sampleData = []
+      const today = new Date()
+      
+      // Generate 30 days of sample data
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(today)
+        date.setDate(today.getDate() - i)
+        const dateString = date.toISOString().split('T')[0]
+        
+        const baseRevenue = 500000 + Math.random() * 1000000
+        const baseCount = 5 + Math.floor(Math.random() * 10)
+        const newCount = Math.floor(baseCount * (0.3 + Math.random() * 0.4)) // 30-70% new
+        const existingCount = baseCount - newCount
+        
+        sampleData.push({
+          dateString,
+          totalRevenue: baseRevenue,
+          totalCount: baseCount,
+          newCount,
+          existingCount,
+          newRevenue: baseRevenue * (0.4 + Math.random() * 0.3), // 40-70% of revenue
+          existingRevenue: baseRevenue * (0.3 + Math.random() * 0.3), // 30-60% of revenue
+          dailyAverage: baseRevenue / baseCount,
+          newDailyAverage: (baseRevenue * 0.6) / newCount,
+          existingDailyAverage: (baseRevenue * 0.4) / existingCount,
+          newPatients: Array.from({ length: newCount }, (_, i) => ({
+            visitorName: `新規患者${i + 1}`,
+            totalWithTax: baseRevenue * 0.6 / newCount,
+            treatmentContent: ['二重', 'くま治療', '糸リフト', '小顔'][Math.floor(Math.random() * 4)],
+            mainStaffName: ['田中太郎', '佐藤花子', '鈴木一郎'][Math.floor(Math.random() * 3)]
+          })),
+          existingPatients: Array.from({ length: existingCount }, (_, i) => ({
+            visitorName: `既存患者${i + 1}`,
+            totalWithTax: baseRevenue * 0.4 / existingCount,
+            treatmentContent: ['注入', 'スキン', '脱毛'][Math.floor(Math.random() * 3)],
+            mainStaffName: ['高橋美咲', '山田健太', '田中太郎'][Math.floor(Math.random() * 3)]
+          }))
+        })
+      }
+      return sampleData
+    }
 
     // Group daily accounts by date
     const dailyGroups = new Map<string, any[]>()
     
-    state.data.dailyAccounts.forEach(record => {
+    state.data.dailyAccounts.forEach((record: any) => {
       const recordDate = new Date(record.recordDate).toISOString().split('T')[0]
       if (!dailyGroups.has(recordDate)) {
         dailyGroups.set(recordDate, [])
@@ -143,6 +186,15 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
 
   return (
     <div className="space-y-6">
+      {/* Sample Data Notice */}
+      {(!state.apiConnected || !state.data.dailyAccounts.length) && (
+        <div className="p-4 border border-yellow-200 rounded-md bg-yellow-50">
+          <p className="text-sm text-yellow-800">
+            📊 サンプルデータを表示中 - 実際のデータを表示するにはAPIに接続してください
+          </p>
+        </div>
+      )}
+
       {/* 日別分析サマリー */}
       <div className="p-6 bg-white rounded-lg shadow">
         <h3 className="mb-4 text-lg font-semibold text-gray-900">日別分析サマリー</h3>

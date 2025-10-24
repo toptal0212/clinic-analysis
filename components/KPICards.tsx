@@ -1,8 +1,8 @@
 'use client'
 
-import { Users, DollarSign, Target } from 'lucide-react'
+import { Users, DollarSign, Target, Building2 } from 'lucide-react'
 import { useDashboard } from '@/contexts/DashboardContext'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 interface KPICardProps {
   title: string
@@ -40,9 +40,18 @@ function KPICard({ title, value, forecast, icon: Icon }: KPICardProps) {
 
 export default function KPICards() {
   const { state } = useDashboard()
+  const [selectedHospital, setSelectedHospital] = useState<string>('all')
+
+  const hospitalOptions = [
+    { id: 'all', name: '全院' },
+    { id: 'yokohama', name: '横浜院' },
+    { id: 'koriyama', name: '郡山院' },
+    { id: 'mito', name: '水戸院' },
+    { id: 'omiya', name: '大宮院' }
+  ]
 
   const kpiData = useMemo(() => {
-    if (!state.apiConnected || !state.data.dailyAccounts.length) {
+    if (!state.apiConnected || !state.data.clinicData) {
       // Return default data when no API connection
       return [
         {
@@ -63,8 +72,30 @@ export default function KPICards() {
       ]
     }
 
-    // Use pre-calculated current month metrics from daily accounts data
-    const { visitCount, accountingUnitPrice, revenue } = state.currentMonthMetrics
+    // Calculate metrics based on selected hospital
+    let dailyAccounts = []
+    if (selectedHospital === 'all') {
+      // Use combined data
+      dailyAccounts = state.data.dailyAccounts || []
+    } else {
+      // Use specific hospital data
+      const clinicData = state.data.clinicData[selectedHospital as keyof typeof state.data.clinicData]
+      dailyAccounts = clinicData?.dailyAccounts || []
+    }
+
+    // Calculate current month metrics
+    const currentDate = new Date()
+    const currentMonth = currentDate.getMonth()
+    const currentYear = currentDate.getFullYear()
+
+    const currentMonthData = dailyAccounts.filter(record => {
+      const recordDate = new Date(record.recordDate)
+      return recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear
+    })
+
+    const visitCount = currentMonthData.length
+    const revenue = currentMonthData.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+    const accountingUnitPrice = visitCount > 0 ? revenue / visitCount : 0
 
     return [
       {
@@ -74,7 +105,7 @@ export default function KPICards() {
       },
       {
         title: '今月会計単価',
-        value: `¥${accountingUnitPrice.toLocaleString()}`,
+        value: `¥${Math.round(accountingUnitPrice).toLocaleString()}`,
         icon: DollarSign
       },
       {
@@ -83,13 +114,39 @@ export default function KPICards() {
         icon: Target
       }
     ]
-  }, [state.apiConnected, state.data.dailyAccounts.length, state.currentMonthMetrics])
+  }, [state.apiConnected, state.data.clinicData, state.data.dailyAccounts, selectedHospital])
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      {kpiData.map((kpi, index) => (
-        <KPICard key={index} {...kpi} />
-      ))}
+    <div className="space-y-6">
+      {/* Hospital Selection */}
+      <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2">
+          <Building2 className="w-5 h-5 text-gray-600" />
+          <span className="text-sm font-medium text-gray-700">院選択:</span>
+        </div>
+        <div className="flex space-x-2">
+          {hospitalOptions.map((hospital) => (
+            <button
+              key={hospital.id}
+              onClick={() => setSelectedHospital(hospital.id)}
+              className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                selectedHospital === hospital.id
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {hospital.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {kpiData.map((kpi, index) => (
+          <KPICard key={index} {...kpi} />
+        ))}
+      </div>
     </div>
   )
 }

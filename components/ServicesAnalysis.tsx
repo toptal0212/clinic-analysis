@@ -23,8 +23,8 @@ export default function ServicesAnalysis() {
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'updated_at' | 'duration'>('updated_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  // Use service search results instead of empty services data
-  const serviceSearchResults: MedicalForceUpdatedBrandCourse[] = state.data.serviceSearchResults || []
+  // Use brand courses data instead of serviceSearchResults
+  const serviceSearchResults: MedicalForceUpdatedBrandCourse[] = state.data.brandCourses || []
 
   // Filter and sort services
   const filteredServices = useMemo(() => {

@@ -12,63 +12,95 @@ export default function RevenueChart() {
 
   const chartData = useMemo(() => {
     // Use trend data from daily accounts if available, otherwise show empty state
-    if (!state.apiConnected || !state.trendData.monthly.labels.length) {
+    if (!state.apiConnected || !state.data.clinicData) {
       return {
         labels: ['データ未接続'],
-        datasets: [
-          {
-            type: 'bar' as const,
-            label: '来院数',
-            data: [0],
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            borderColor: 'rgba(59, 130, 246, 0.8)',
-            borderWidth: 1,
-            yAxisID: 'y',
-          },
-          {
-            type: 'line' as const,
-            label: '累積売上',
-            data: [0],
-            borderColor: 'rgba(239, 68, 68, 1)',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            borderWidth: 3,
-            fill: false,
-            tension: 0,
-            yAxisID: 'y1',
-          }
-        ]
+        datasets: []
       }
     }
 
-    // Use monthly trend data from daily accounts (2 years)
-    const { labels, visitCounts, revenues } = state.trendData.monthly
+    // Hospital configurations with colors
+    const hospitalConfigs = [
+      { id: 'yokohama', name: '横浜院', color: '#3B82F6', bgColor: 'rgba(59, 130, 246, 0.1)' },
+      { id: 'koriyama', name: '郡山院', color: '#10B981', bgColor: 'rgba(16, 185, 129, 0.1)' },
+      { id: 'mito', name: '水戸院', color: '#8B5CF6', bgColor: 'rgba(139, 92, 246, 0.1)' },
+      { id: 'omiya', name: '大宮院', color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.1)' }
+    ]
+
+    // Get all months from all hospitals to create consistent labels
+    const allMonths = new Set<string>()
+    hospitalConfigs.forEach(hospital => {
+      const clinicData = state.data.clinicData[hospital.id as keyof typeof state.data.clinicData]
+      const dailyAccounts = clinicData?.dailyAccounts || []
+      
+      dailyAccounts.forEach(record => {
+        const recordDate = new Date(record.recordDate)
+        const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`
+        allMonths.add(monthKey)
+      })
+    })
+
+    // Sort months chronologically
+    const sortedMonths = Array.from(allMonths).sort()
+
+    // Calculate data for each hospital
+    const datasets: any[] = []
+    
+    hospitalConfigs.forEach(hospital => {
+      const clinicData = state.data.clinicData[hospital.id as keyof typeof state.data.clinicData]
+      const dailyAccounts = clinicData?.dailyAccounts || []
+      
+      // Calculate monthly data for this hospital
+      const monthlyData = new Map<string, { visits: number, revenue: number }>()
+      
+      dailyAccounts.forEach(record => {
+        const recordDate = new Date(record.recordDate)
+        const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`
+        
+        if (!monthlyData.has(monthKey)) {
+          monthlyData.set(monthKey, { visits: 0, revenue: 0 })
+        }
+        
+        const monthData = monthlyData.get(monthKey)!
+        monthData.visits += 1
+        monthData.revenue += record.totalWithTax || 0
+      })
+
+      // Create data arrays for this hospital (fill missing months with 0)
+      const visitData = sortedMonths.map(month => monthlyData.get(month)?.visits || 0)
+      const revenueData = sortedMonths.map(month => monthlyData.get(month)?.revenue || 0)
+
+      // Add visit count dataset (bar chart)
+      datasets.push({
+        type: 'bar' as const,
+        label: `${hospital.name} 来院数`,
+        data: visitData,
+        backgroundColor: hospital.bgColor,
+        borderColor: hospital.color,
+        borderWidth: 1,
+        yAxisID: 'y',
+        stack: 'visits', // Stack bars for visits
+      })
+
+      // Add revenue dataset (line chart)
+      datasets.push({
+        type: 'line' as const,
+        label: `${hospital.name} 売上`,
+        data: revenueData,
+        borderColor: hospital.color,
+        backgroundColor: hospital.bgColor,
+        borderWidth: 3,
+        fill: false,
+        tension: 0.1,
+        yAxisID: 'y1',
+      })
+    })
 
     return {
-      labels,
-      datasets: [
-        {
-          type: 'bar' as const,
-          label: '来院数',
-          data: visitCounts,
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          borderColor: 'rgba(59, 130, 246, 0.8)',
-          borderWidth: 1,
-          yAxisID: 'y',
-        },
-        {
-          type: 'line' as const,
-          label: '累積売上',
-          data: revenues,
-          borderColor: 'rgba(239, 68, 68, 1)',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          borderWidth: 3,
-          fill: false,
-          tension: 0,
-          yAxisID: 'y1',
-        }
-      ]
+      labels: sortedMonths,
+      datasets
     }
-  }, [state.apiConnected, state.trendData.monthly])
+  }, [state.apiConnected, state.data.clinicData])
 
   // Year-over-year comparison summary
   const yearOverYearSummary = useMemo(() => {
@@ -108,17 +140,24 @@ export default function RevenueChart() {
         position: 'top' as const,
         labels: {
           usePointStyle: true,
-          padding: 20,
+          padding: 15,
+          filter: function(legendItem: any, chartData: any) {
+            // Show only one legend item per hospital (either visits or revenue)
+            return legendItem.text.includes('来院数')
+          }
         }
       },
       tooltip: {
         callbacks: {
           label: function(context: any) {
-            if (context.datasetIndex === 0) {
-              return `来院数: ${context.parsed.y.toLocaleString()}件`
-            } else {
-              return `累積売上: ¥${context.parsed.y.toLocaleString()}`
+            const label = context.dataset.label || ''
+            const value = context.parsed.y
+            if (label.includes('来院数')) {
+              return `${label}: ${value.toLocaleString()}件`
+            } else if (label.includes('売上')) {
+              return `${label}: ¥${value.toLocaleString()}`
             }
+            return `${label}: ${value.toLocaleString()}`
           }
         }
       }
@@ -162,7 +201,28 @@ export default function RevenueChart() {
   return (
     <div className="card">
       <div className="card-header">
-        <h2 className="text-lg font-semibold text-gray-900">売上・来院数推移（2年間）</h2>
+        <h2 className="text-lg font-semibold text-gray-900">売上・来院数推移（全院比較）</h2>
+        <p className="text-sm text-gray-600 mt-1">4つのクリニックの月別推移を同時表示</p>
+        
+        {/* Hospital Color Legend */}
+        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: '#3B82F6' }}></div>
+            <span className="text-gray-700">横浜院</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: '#10B981' }}></div>
+            <span className="text-gray-700">郡山院</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: '#8B5CF6' }}></div>
+            <span className="text-gray-700">水戸院</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: '#F59E0B' }}></div>
+            <span className="text-gray-700">大宮院</span>
+          </div>
+        </div>
         {yearOverYearSummary && (
           <div className="mt-2 text-sm text-gray-600">
             <div className="flex items-center space-x-6">
