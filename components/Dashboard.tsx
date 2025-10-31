@@ -19,9 +19,20 @@ import AdvertisingAnalysis from './AdvertisingAnalysis'
 import TreatmentHierarchyAnalysis from './TreatmentHierarchyAnalysis'
 import ClinicDataView from './ClinicDataView'
 import HospitalTrendGraphs from './HospitalTrendGraphs'
+import AnnualSales from './AnnualSales'
 import DebugDisplay from './DebugDisplay'
 import SalesTableAnalysis from './SalesTableAnalysis'
+import Cancellation from './Cancellation'
 import TreatmentCategoryDebug from './TreatmentCategoryDebug'
+import SalesAnalysis from './SalesAnalysis'
+import TreatmentTrendAnalysis from './TreatmentTrendAnalysis'
+import CrossSell from './CrossSell'
+import TreatmentSalesTrend from './TreatmentSalesTrend'
+import StaffSales from './StaffSales'
+import SalesComparison from './SalesComparison'
+import CustomerAttributesAnalysis from './CustomerAttributesAnalysis'
+import ClinicSales from './ClinicSales'
+import MonthlyProgress from './MonthlyProgress'
 
 interface DashboardProps {
   activeTab: string
@@ -73,12 +84,63 @@ export default function Dashboard({ activeTab, tabLoading }: DashboardProps) {
             <DataTable />
           </div>
         )
+      case 'sales-analysis':
+        return <SalesAnalysis />
+      case 'treatment-trend':
+        return <TreatmentTrendAnalysis />
+      case 'treatment-sales':
+        return <TreatmentSalesTrend />
+      case 'annual-sales':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">年間売上推移</h2>
+            <AnnualSales />
+          </div>
+        )
+      case 'cancellation':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">予約キャンセル</h2>
+            <Cancellation />
+          </div>
+        )
+      case 'repeat-analysis':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">リ ピー 卜分析</h2>
+            <RepeatAnalysis />
+          </div>
+        )
+      case 'cross-sell':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">クロスセル</h2>
+            <CrossSell />
+          </div>
+        )
+      case 'staff-sales':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">ス夕ッフ別売上</h2>
+            <StaffSales />
+          </div>
+        )
+      case 'sales-comparison':
+        return <SalesComparison />
+      case 'customer-attributes':
+        return <CustomerAttributesAnalysis />
+      case 'clinic-comparison':
+        return <ClinicComparison />
+      case 'clinic-sales':
+        return <ClinicSales />
+      case 'monthly-progress':
+        return <MonthlyProgress />
       case 'summary':
         return <SummaryAnalysis />
       case 'daily':
         return <DailyAnalysis dateRange={dateRange} />
       case 'comparison':
-        return <ClinicComparison dateRange={dateRange} />
+        return <ClinicComparison />
       case 'patients':
         return <PatientDetails />
       case 'services':

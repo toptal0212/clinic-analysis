@@ -202,10 +202,10 @@ export default function RevenueChart() {
     <div className="card">
       <div className="card-header">
         <h2 className="text-lg font-semibold text-gray-900">売上・来院数推移（全院比較）</h2>
-        <p className="text-sm text-gray-600 mt-1">4つのクリニックの月別推移を同時表示</p>
+        <p className="mt-1 text-sm text-gray-600">4つのクリニックの月別推移を同時表示</p>
         
         {/* Hospital Color Legend */}
-        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <div className="flex flex-wrap gap-4 mt-3 text-sm">
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 rounded" style={{ backgroundColor: '#3B82F6' }}></div>
             <span className="text-gray-700">横浜院</span>

@@ -2,142 +2,290 @@
 
 import React, { useState, useMemo } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
-import { 
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  DollarSign,
-  Target,
-  Calendar,
-  Building2
-} from 'lucide-react'
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from 'chart.js'
+import { Line } from 'react-chartjs-2'
+import { AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
 
-interface ClinicComparisonProps {
-  dateRange: { start: Date, end: Date }
-}
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
 
-export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
+export default function ClinicComparison() {
   const { state } = useDashboard()
-  const [selectedMetric, setSelectedMetric] = useState<'revenue' | 'count' | 'average'>('revenue')
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'beauty' | 'other'>('all')
-  const [selectedIndicator, setSelectedIndicator] = useState<'total' | 'new' | 'existing'>('total')
-  const [selectedAnalysisCategory, setSelectedAnalysisCategory] = useState<'referral' | 'treatment'>('referral')
+  const [leftClinic, setLeftClinic] = useState<string>('')
+  const [rightClinic, setRightClinic] = useState<string>('')
+  const [dateRangeStart, setDateRangeStart] = useState<string>('2023-01-01')
+  const [dateRangeEnd, setDateRangeEnd] = useState<string>(new Date().toISOString().split('T')[0])
 
-  // 表示指標データの計算
-  const displayIndicators = useMemo(() => {
-    if (!state.apiConnected || !state.data.dailyAccounts.length) return null
+  // Get all daily accounts data
+  const getAllDailyAccounts = () => {
+    const allData: any[] = []
+    
+    if (state.data?.dailyAccounts && Array.isArray(state.data.dailyAccounts)) {
+      allData.push(...state.data.dailyAccounts)
+    }
+    
+    if (state.data?.clinicData) {
+      Object.values(state.data.clinicData).forEach((clinic: any) => {
+        if (clinic?.dailyAccounts && Array.isArray(clinic.dailyAccounts)) {
+          allData.push(...clinic.dailyAccounts)
+        }
+      })
+    }
+    
+    return allData
+  }
 
-    const filteredData = state.data.dailyAccounts.filter(record => {
-      const recordDate = new Date(record.recordDate)
-      return recordDate >= dateRange.start && recordDate <= dateRange.end
+  // Helper to parse date
+  const parseDate = (record: any): Date | null => {
+    const dateStr = record.recordDate || record.visitDate || record.treatmentDate || record.accountingDate
+    if (!dateStr) return null
+    const date = new Date(dateStr)
+    return isNaN(date.getTime()) ? null : date
+  }
+
+  // Get available clinics from data
+  const availableClinics = useMemo(() => {
+    const allData = getAllDailyAccounts()
+    const clinics = new Set<string>()
+    allData.forEach((r: any) => {
+      const clinic = r.clinicName || 'その他'
+      if (clinic) clinics.add(clinic)
+    })
+    return Array.from(clinics).sort()
+  }, [state.data.dailyAccounts, state.data.clinicData])
+
+  // Resolve selected clinics with fallback to first two available
+  const resolvedLeftClinic = useMemo(() => {
+    if (leftClinic && availableClinics.includes(leftClinic)) return leftClinic
+    return availableClinics[0] || ''
+  }, [leftClinic, availableClinics])
+
+  const resolvedRightClinic = useMemo(() => {
+    if (rightClinic && availableClinics.includes(rightClinic)) return rightClinic
+    return availableClinics[1] || availableClinics[0] || ''
+  }, [rightClinic, availableClinics])
+
+  // Calculate monthly metrics for a clinic
+  const calculateClinicMetrics = (clinicName: string) => {
+    const allData = getAllDailyAccounts()
+    const clinicData = allData.filter((r: any) => (r.clinicName || 'その他') === clinicName)
+
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+
+    // Current month data
+    const currentMonthData = clinicData.filter((r: any) => {
+      const date = parseDate(r)
+      if (!date) return false
+      return date.getFullYear() === currentYear && date.getMonth() === currentMonth
     })
 
-    const totalRevenue = filteredData.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-    const totalCount = filteredData.length
-    const newCount = filteredData.filter(record => record.isFirst === true).length
-    const existingCount = filteredData.filter(record => record.isFirst === false).length
-    const newRevenue = filteredData.filter(record => record.isFirst === true).reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-    const existingRevenue = filteredData.filter(record => record.isFirst === false).reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+    // Last month data
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear
+    const lastMonthData = clinicData.filter((r: any) => {
+      const date = parseDate(r)
+      if (!date) return false
+      return date.getFullYear() === lastMonthYear && date.getMonth() === lastMonth
+    })
+
+    // Last year same month data
+    const lastYearMonthData = clinicData.filter((r: any) => {
+      const date = parseDate(r)
+      if (!date) return false
+      return date.getFullYear() === currentYear - 1 && date.getMonth() === currentMonth
+    })
+
+    const currentVisitors = currentMonthData.length
+    const currentRevenue = currentMonthData.reduce((sum, r) => sum + (Array.isArray(r.paymentItems) && r.paymentItems.length>0 ? r.paymentItems.reduce((s:any,it:any)=>s+(it.priceWithTax||0),0) : (r.totalWithTax||0)), 0)
+    const currentUnitPrice = currentVisitors > 0 ? currentRevenue / currentVisitors : 0
+
+    const lastMonthVisitors = lastMonthData.length
+    const lastMonthRevenue = lastMonthData.reduce((sum, r) => sum + (Array.isArray(r.paymentItems) && r.paymentItems.length>0 ? r.paymentItems.reduce((s:any,it:any)=>s+(it.priceWithTax||0),0) : (r.totalWithTax||0)), 0)
+    const lastMonthUnitPrice = lastMonthVisitors > 0 ? lastMonthRevenue / lastMonthVisitors : 0
+
+    const lastYearVisitors = lastYearMonthData.length
+    const lastYearRevenue = lastYearMonthData.reduce((sum, r) => sum + (Array.isArray(r.paymentItems) && r.paymentItems.length>0 ? r.paymentItems.reduce((s:any,it:any)=>s+(it.priceWithTax||0),0) : (r.totalWithTax||0)), 0)
+    const lastYearUnitPrice = lastYearVisitors > 0 ? lastYearRevenue / lastYearVisitors : 0
+
+    // Forecast (simple: assume linear growth)
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+    const daysPassed = now.getDate()
+    const forecastFactor = daysInMonth / daysPassed
+
+    const forecastVisitors = Math.round(currentVisitors * forecastFactor)
+    const forecastRevenue = Math.round(currentRevenue * forecastFactor)
 
     return {
-      totalRevenue,
-      totalCount,
-      newCount,
-      existingCount,
-      newRevenue,
-      existingRevenue,
-      totalAverage: totalCount > 0 ? totalRevenue / totalCount : 0,
-      newAverage: newCount > 0 ? newRevenue / newCount : 0,
-      existingAverage: existingCount > 0 ? existingRevenue / existingCount : 0
+      currentVisitors,
+      currentRevenue,
+      currentUnitPrice,
+      forecastVisitors,
+      forecastRevenue,
+      visitorMoM: lastMonthVisitors > 0 ? (currentVisitors / lastMonthVisitors) * 100 : 100,
+      visitorYoY: lastYearVisitors > 0 ? (currentVisitors / lastYearVisitors) * 100 : 100,
+      unitPriceMoM: lastMonthUnitPrice > 0 ? (currentUnitPrice / lastMonthUnitPrice) * 100 : 100,
+      unitPriceYoY: lastYearUnitPrice > 0 ? (currentUnitPrice / lastYearUnitPrice) * 100 : 100,
+      revenueMoM: lastMonthRevenue > 0 ? (currentRevenue / lastMonthRevenue) * 100 : 100,
+      revenueYoY: lastYearRevenue > 0 ? (currentRevenue / lastYearRevenue) * 100 : 100
     }
-  }, [state.data.dailyAccounts, state.apiConnected, dateRange])
+  }
 
-  // カテゴリー別分析データ
-  const categoryAnalysis = useMemo(() => {
-    if (!state.apiConnected || !state.data.dailyAccounts.length) return { referral: {}, treatment: {} }
+  // Calculate annual trends for a clinic
+  const calculateAnnualTrends = (clinicName: string) => {
+    const allData = getAllDailyAccounts()
+    const clinicData = allData.filter((r: any) => (r.clinicName || 'その他') === clinicName)
 
-    const filteredData = state.data.dailyAccounts.filter(record => {
-      const recordDate = new Date(record.recordDate)
-      return recordDate >= dateRange.start && recordDate <= dateRange.end
-    })
+    const startDate = new Date(dateRangeStart)
+    const endDate = new Date(dateRangeEnd)
+    
+    const years: number[] = []
+    for (let y = startDate.getFullYear(); y <= endDate.getFullYear(); y++) {
+      years.push(y)
+    }
 
-    const referralData = filteredData.reduce((acc, record) => {
-      const source = record.visitorInflowSourceName || 'その他'
-      if (!acc[source]) {
-        acc[source] = { count: 0, revenue: 0, newCount: 0, existingCount: 0 }
-      }
-      acc[source].count += 1
-      acc[source].revenue += record.totalWithTax || 0
-      if (record.isFirst) {
-        acc[source].newCount += 1
-      } else {
-        acc[source].existingCount += 1
-      }
-      return acc
-    }, {} as Record<string, { count: number, revenue: number, newCount: number, existingCount: number }>)
+    const monthlyData: { [year: number]: { [month: number]: any } } = {}
 
-    const treatmentData = filteredData.reduce((acc, record) => {
-      const treatment = record.visitorTreatmentName || 'その他'
-      if (!acc[treatment]) {
-        acc[treatment] = { count: 0, revenue: 0, newCount: 0, existingCount: 0 }
-      }
-      acc[treatment].count += 1
-      acc[treatment].revenue += record.totalWithTax || 0
-      if (record.isFirst) {
-        acc[treatment].newCount += 1
-      } else {
-        acc[treatment].existingCount += 1
-      }
-      return acc
-    }, {} as Record<string, { count: number, revenue: number, newCount: number, existingCount: number }>)
+    clinicData.forEach((r: any) => {
+      const date = parseDate(r)
+      if (!date || date < startDate || date > endDate) return
 
-    return { referral: referralData, treatment: treatmentData }
-  }, [state.data.dailyAccounts, state.apiConnected, dateRange])
+      const year = date.getFullYear()
+      const month = date.getMonth()
 
-  // 月別推移データ
-  const monthlyTrends = useMemo(() => {
-    if (!state.apiConnected || !state.data.dailyAccounts.length) return []
-
-    const monthlyData = new Map<string, any>()
-
-    state.data.dailyAccounts.forEach(record => {
-      const recordDate = new Date(record.recordDate)
-      if (recordDate >= dateRange.start && recordDate <= dateRange.end) {
-        const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`
-        
-        if (!monthlyData.has(monthKey)) {
-          monthlyData.set(monthKey, {
-            year: recordDate.getFullYear(),
-            month: recordDate.getMonth() + 1,
-            totalRevenue: 0,
-            totalCount: 0,
-            newCount: 0,
-            existingCount: 0,
-            newRevenue: 0,
-            existingRevenue: 0
-          })
-        }
-
-        const monthData = monthlyData.get(monthKey)!
-        monthData.totalRevenue += record.totalWithTax || 0
-        monthData.totalCount += 1
-        
-        if (record.isFirst) {
-          monthData.newCount += 1
-          monthData.newRevenue += record.totalWithTax || 0
-        } else {
-          monthData.existingCount += 1
-          monthData.existingRevenue += record.totalWithTax || 0
+      if (!monthlyData[year]) monthlyData[year] = {}
+      if (!monthlyData[year][month]) {
+        monthlyData[year][month] = {
+          visitors: 0,
+          revenue: 0,
+          firstVisits: 0,
+          repeatVisits: 0,
+          count: 0
         }
       }
+
+      monthlyData[year][month].count += 1
+      monthlyData[year][month].revenue += (Array.isArray(r.paymentItems) && r.paymentItems.length>0 ? r.paymentItems.reduce((s:any,it:any)=>s+(it.priceWithTax||0),0) : (r.totalWithTax||0))
+      
+      const isFirst = r.isFirst === true || r.isFirstVisit === true
+      if (isFirst) {
+        monthlyData[year][month].firstVisits += 1
+      } else {
+        monthlyData[year][month].repeatVisits += 1
+      }
     })
 
-    return Array.from(monthlyData.values()).sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year
-      return a.month - b.month
+    // Build chart data for each metric
+    const months = Array.from({ length: 12 }, (_, i) => i)
+    const currentYear = new Date().getFullYear()
+
+    const buildDataset = (getValue: (data: any) => number, labelSuffix: string) => {
+      const datasets = years.map(year => ({
+        label: `${year}年${labelSuffix}`,
+        data: months.map(month => {
+          const data = monthlyData[year]?.[month]
+          return data ? getValue(data) : 0
+        }),
+        borderColor: year === currentYear ? '#EF4444' : year === currentYear - 1 ? '#3B82F6' : '#9CA3AF',
+        backgroundColor: year === currentYear ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+        borderWidth: year === currentYear ? 2 : 1,
+        pointRadius: 2,
+        tension: 0.2
+      }))
+      return {
+        labels: months.map(m => `${m + 1}月`),
+        datasets
+      }
+    }
+
+    return {
+      visitors: buildDataset(d => d.count, ''),
+      revenue: buildDataset(d => d.revenue, ''),
+      unitPrice: buildDataset(d => d.count > 0 ? d.revenue / d.count : 0, ''),
+      firstVisitConversion: buildDataset(d => d.count > 0 ? (d.firstVisits / d.count) * 100 : 0, ''),
+      repeatRate: buildDataset(d => d.count > 0 ? (d.repeatVisits / d.count) * 100 : 0, '')
+    }
+  }
+
+  // Calculate category breakdown for a clinic
+  const calculateCategoryBreakdown = (clinicName: string) => {
+    const allData = getAllDailyAccounts()
+    const clinicData = allData.filter((r: any) => (r.clinicName || 'その他') === clinicName)
+
+    const now = new Date()
+    const last28Days = new Date(now)
+    last28Days.setDate(now.getDate() - 28)
+    const prev28Days = new Date(last28Days)
+    prev28Days.setDate(last28Days.getDate() - 28)
+    const prevYear28Days = new Date(last28Days)
+    prevYear28Days.setFullYear(last28Days.getFullYear() - 1)
+    const prevYear28DaysEnd = new Date(now)
+    prevYear28DaysEnd.setFullYear(now.getFullYear() - 1)
+
+    const categoryMap = new Map<string, {
+      sales28Days: number
+      salesPrev28Days: number
+      salesPrevYear28Days: number
+      accounts: number
+      firstVisits: number
+    }>()
+
+    clinicData.forEach((r: any) => {
+      const date = parseDate(r)
+      if (!date) return
+
+      const category = r.paymentItems?.[0]?.category || r.treatmentCategory || 'その他'
+      const amount = (Array.isArray(r.paymentItems) && r.paymentItems.length>0 ? r.paymentItems.reduce((s:any,it:any)=>s+(it.priceWithTax||0),0) : (r.totalWithTax||0))
+      const isFirst = r.isFirst === true || r.isFirstVisit === true
+
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, {
+          sales28Days: 0,
+          salesPrev28Days: 0,
+          salesPrevYear28Days: 0,
+          accounts: 0,
+          firstVisits: 0
+        })
+      }
+
+      const catData = categoryMap.get(category)!
+
+      if (date >= last28Days) {
+        catData.sales28Days += amount
+        catData.accounts += 1
+        if (isFirst) catData.firstVisits += 1
+      }
+
+      if (date >= prev28Days && date < last28Days) {
+        catData.salesPrev28Days += amount
+      }
+
+      if (date >= prevYear28Days && date < prevYear28DaysEnd) {
+        catData.salesPrevYear28Days += amount
+      }
     })
-  }, [state.data.dailyAccounts, state.apiConnected, dateRange])
+
+    return Array.from(categoryMap.entries()).map(([category, data]) => {
+      const totalSales = Array.from(categoryMap.values()).reduce((sum, d) => sum + d.sales28Days, 0)
+      return {
+        category,
+        sales28Days: data.sales28Days,
+        firstVisitConversion: data.accounts > 0 ? (data.firstVisits / data.accounts) * 100 : 0,
+        unitPrice: data.accounts > 0 ? data.sales28Days / data.accounts : 0,
+        salesComparison28Days: data.sales28Days - data.salesPrev28Days,
+        salesComparisonPrevYear: data.salesPrevYear28Days
+      }
+    }).sort((a, b) => b.sales28Days - a.sales28Days)
+  }
+
+  const leftMetrics = useMemo(() => calculateClinicMetrics(leftClinic), [leftClinic, state.data.dailyAccounts, state.data.clinicData])
+  const rightMetrics = useMemo(() => calculateClinicMetrics(rightClinic), [rightClinic, state.data.dailyAccounts, state.data.clinicData])
+
+  const leftTrends = useMemo(() => calculateAnnualTrends(leftClinic), [leftClinic, dateRangeStart, dateRangeEnd, state.data.dailyAccounts, state.data.clinicData])
+  const rightTrends = useMemo(() => calculateAnnualTrends(rightClinic), [rightClinic, dateRangeStart, dateRangeEnd, state.data.dailyAccounts, state.data.clinicData])
+
+  const leftCategories = useMemo(() => calculateCategoryBreakdown(leftClinic), [leftClinic, state.data.dailyAccounts, state.data.clinicData])
+  const rightCategories = useMemo(() => calculateCategoryBreakdown(rightClinic), [rightClinic, state.data.dailyAccounts, state.data.clinicData])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -152,303 +300,398 @@ export default function ClinicComparison({ dateRange }: ClinicComparisonProps) {
     return new Intl.NumberFormat('ja-JP').format(num)
   }
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('ja-JP', {
-      year: 'numeric',
-      month: 'short'
-    }).format(date)
-  }
+  const hasRealData = getAllDailyAccounts().length > 0
 
-  if (!displayIndicators) {
+  if (!hasRealData) {
     return (
-      <div className="p-6 bg-white rounded-lg shadow">
-        <div className="text-center text-gray-500">
-          データがありません
+      <div className="p-6">
+        <div className="p-8 text-center bg-white border rounded-lg shadow-sm">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+          <p className="text-lg text-gray-600">データがありません</p>
+          <p className="mt-2 text-sm text-gray-500">APIに接続するかCSVファイルをインポートしてデータを表示してください</p>
         </div>
       </div>
     )
   }
 
-  return (
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 10,
+          font: { size: 10 }
+        }
+      },
+      tooltip: {
+        mode: 'index' as const,
+        intersect: false
+      }
+    },
+    scales: {
+      y: {
+        ticks: {
+          callback: (value: any) => {
+            if (value >= 1000000) return `¥${(value / 1000000).toFixed(0)}M`
+            if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+            return value.toLocaleString()
+          }
+        }
+      }
+    }
+  }
+
+  const ClinicSummaryCards = ({ clinicName, metrics }: { clinicName: string, metrics: typeof leftMetrics }) => (
+    <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="p-4 bg-white border rounded-lg shadow-sm">
+        <div className="mb-1 text-sm text-gray-600">今月の来院数</div>
+        <div className="mb-1 text-2xl font-bold text-gray-900">{formatNumber(metrics.currentVisitors)}件</div>
+        <div className="mb-1 text-xs text-gray-500">予測: {formatNumber(metrics.forecastVisitors)}件</div>
+        <div className="flex items-center space-x-1 text-xs">
+          <span>予測 vs 先月:</span>
+          {metrics.visitorMoM >= 100 ? (
+            <span className="flex items-center text-green-600">
+              <TrendingUp className="w-3 h-3" />
+              {metrics.visitorMoM.toFixed(0)}%
+            </span>
+          ) : (
+            <span className="flex items-center text-red-600">
+              <TrendingDown className="w-3 h-3" />
+              {metrics.visitorMoM.toFixed(0)}%
+            </span>
+          )}
+              </div>
+        <div className="flex items-center space-x-1 text-xs">
+          <span>予測 vs 前年:</span>
+          {metrics.visitorYoY >= 100 ? (
+            <span className="flex items-center text-green-600">
+              <TrendingUp className="w-3 h-3" />
+              {metrics.visitorYoY.toFixed(0)}%
+            </span>
+          ) : (
+            <span className="flex items-center text-red-600">
+              <TrendingDown className="w-3 h-3" />
+              {metrics.visitorYoY.toFixed(0)}%
+            </span>
+          )}
+            </div>
+          </div>
+
+      <div className="p-4 bg-white border rounded-lg shadow-sm">
+        <div className="mb-1 text-sm text-gray-600">今月の単価</div>
+        <div className="mb-1 text-2xl font-bold text-gray-900">{formatCurrency(metrics.currentUnitPrice)}</div>
+        <div className="mb-1 text-xs text-gray-500">&nbsp;</div>
+        <div className="flex items-center space-x-1 text-xs">
+          <span>予測 vs 先月:</span>
+          {metrics.unitPriceMoM >= 100 ? (
+            <span className="flex items-center text-green-600">
+              <TrendingUp className="w-3 h-3" />
+              {metrics.unitPriceMoM.toFixed(0)}%
+            </span>
+          ) : (
+            <span className="flex items-center text-red-600">
+              <TrendingDown className="w-3 h-3" />
+              {metrics.unitPriceMoM.toFixed(0)}%
+            </span>
+          )}
+              </div>
+        <div className="flex items-center space-x-1 text-xs">
+          <span>予測 vs 前年:</span>
+          {metrics.unitPriceYoY >= 100 ? (
+            <span className="flex items-center text-green-600">
+              <TrendingUp className="w-3 h-3" />
+              {metrics.unitPriceYoY.toFixed(0)}%
+            </span>
+          ) : (
+            <span className="flex items-center text-red-600">
+              <TrendingDown className="w-3 h-3" />
+              {metrics.unitPriceYoY.toFixed(0)}%
+            </span>
+          )}
+            </div>
+          </div>
+
+      <div className="p-4 bg-white border rounded-lg shadow-sm">
+        <div className="mb-1 text-sm text-gray-600">今月の売上</div>
+        <div className="mb-1 text-2xl font-bold text-gray-900">{formatCurrency(metrics.currentRevenue)}</div>
+        <div className="mb-1 text-xs text-gray-500">予測: {formatCurrency(metrics.forecastRevenue)}</div>
+        <div className="flex items-center space-x-1 text-xs">
+          <span>予測 vs 先月:</span>
+          {metrics.revenueMoM >= 100 ? (
+            <span className="flex items-center text-green-600">
+              <TrendingUp className="w-3 h-3" />
+              {metrics.revenueMoM.toFixed(0)}%
+            </span>
+          ) : (
+            <span className="flex items-center text-red-600">
+              <TrendingDown className="w-3 h-3" />
+              {metrics.revenueMoM.toFixed(0)}%
+            </span>
+          )}
+              </div>
+        <div className="flex items-center space-x-1 text-xs">
+          <span>予測 vs 前年:</span>
+          {metrics.revenueYoY >= 100 ? (
+            <span className="flex items-center text-green-600">
+              <TrendingUp className="w-3 h-3" />
+              {metrics.revenueYoY.toFixed(0)}%
+            </span>
+          ) : (
+            <span className="flex items-center text-red-600">
+              <TrendingDown className="w-3 h-3" />
+              {metrics.revenueYoY.toFixed(0)}%
+            </span>
+          )}
+            </div>
+          </div>
+    </div>
+  )
+
+  const ClinicTrendCharts = ({ clinicName, trends }: { clinicName: string, trends: typeof leftTrends }) => (
     <div className="space-y-6">
-      {/* 表示指標メニュー */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">表示指標</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {/* 総売上 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">総売上</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(displayIndicators.totalRevenue)}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-green-600" />
-            </div>
-          </div>
-
-          {/* 総来院者数 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">総来院者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(displayIndicators.totalCount)}人
-                </p>
-              </div>
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
-          </div>
-
-          {/* 新規来院者数 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">新規来院者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(displayIndicators.newCount)}人
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-green-600" />
-            </div>
-          </div>
-
-          {/* 既存来院者数 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">既存来院者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(displayIndicators.existingCount)}人
-                </p>
-              </div>
-              <Calendar className="w-8 h-8 text-purple-600" />
-            </div>
-          </div>
-
-          {/* 平均単価 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">平均単価</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(displayIndicators.totalAverage)}
-                </p>
-              </div>
-              <Target className="w-8 h-8 text-orange-600" />
-            </div>
-          </div>
-
-          {/* 新規平均単価 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">新規平均単価</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(displayIndicators.newAverage)}
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-red-600" />
-            </div>
-          </div>
+      <h3 className="text-lg font-semibold text-gray-900">{clinicName} / 年間推移</h3>
+      <div className="mb-4 text-xs text-gray-500">赤が今年</div>
+      
+      <div className="grid grid-cols-1 gap-6">
+        <div className="p-4 bg-white border rounded-lg">
+          <h4 className="mb-2 text-sm font-medium text-gray-700">来院数</h4>
+          <div className="h-48">
+            <Line data={trends.visitors} options={chartOptions} />
         </div>
       </div>
 
-      {/* カテゴリーメニュー */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別分析</h3>
-        
-        {/* カテゴリー選択 */}
-        <div className="mb-6">
-          <div className="flex space-x-4">
-            <button
-              onClick={() => setSelectedAnalysisCategory('referral')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedAnalysisCategory === 'referral'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              流入元別
-            </button>
-            <button
-              onClick={() => setSelectedAnalysisCategory('treatment')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedAnalysisCategory === 'treatment'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              施術別
-            </button>
+        <div className="p-4 bg-white border rounded-lg">
+          <h4 className="mb-2 text-sm font-medium text-gray-700">売上</h4>
+          <div className="h-48">
+            <Line data={trends.revenue} options={chartOptions} />
           </div>
         </div>
 
-        {/* カテゴリー分析結果 */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {Object.entries(selectedAnalysisCategory === 'referral' ? categoryAnalysis.referral : categoryAnalysis.treatment)
-          .sort(([,a], [,b]) => (b as any).revenue - (a as any).revenue)
-          .slice(0, 6)
-          .map(([category, data]: [string, any]) => (
-            <div key={category} className="p-4 border rounded-lg">
-              <div className="text-sm font-medium text-gray-600 mb-2">{category}</div>
-              <div className="text-2xl font-bold text-gray-900 mb-1">
-                {formatCurrency(data.revenue)}
-              </div>
-              <div className="text-sm text-gray-600">
-                件数: {formatNumber(data.count)}件
-              </div>
-              <div className="text-sm text-gray-600">
-                単価: {formatCurrency(data.count > 0 ? data.revenue / data.count : 0)}
-              </div>
-              <div className="text-xs text-gray-500 mt-2">
-                新規: {formatNumber(data.newCount)}件 / 既存: {formatNumber(data.existingCount)}件
-              </div>
-            </div>
-          ))}
+        <div className="p-4 bg-white border rounded-lg">
+          <h4 className="mb-2 text-sm font-medium text-gray-700">会計単価</h4>
+          <div className="h-48">
+            <Line data={trends.unitPrice} options={chartOptions} />
         </div>
       </div>
 
-      {/* 全体 - 売上比較 */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">全体 - 売上比較</h3>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* 新規 vs 既存売上比較 */}
-          <div>
-            <h4 className="mb-3 font-semibold text-gray-800">新規 vs 既存売上比較</h4>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                  <span className="font-medium text-green-800">新規患者</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-green-900">
-                    {formatCurrency(displayIndicators.newRevenue)}
-                  </div>
-                  <div className="text-sm text-green-700">
-                    {formatNumber(displayIndicators.newCount)}件
-                  </div>
+        <div className="p-4 bg-white border rounded-lg">
+          <h4 className="mb-2 text-sm font-medium text-gray-700">初診成約率</h4>
+          <div className="h-48">
+            <Line data={trends.firstVisitConversion} options={{
+              ...chartOptions,
+              scales: {
+                ...chartOptions.scales,
+                y: {
+                  ticks: {
+                    callback: (value: any) => `${value.toFixed(0)}%`
+                  }
+                }
+              }
+            }} />
                 </div>
               </div>
               
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Calendar className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium text-blue-800">既存患者</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-blue-900">
-                    {formatCurrency(displayIndicators.existingRevenue)}
-                  </div>
-                  <div className="text-sm text-blue-700">
-                    {formatNumber(displayIndicators.existingCount)}件
+        <div className="p-4 bg-white border rounded-lg">
+          <h4 className="mb-2 text-sm font-medium text-gray-700">リピート率</h4>
+          <div className="h-48">
+            <Line data={trends.repeatRate} options={{
+              ...chartOptions,
+              scales: {
+                ...chartOptions.scales,
+                y: {
+                  ticks: {
+                    callback: (value: any) => `${value.toFixed(0)}%`
+                  }
+                }
+              }
+            }} />
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+  )
 
-          {/* 売上構成比 */}
-          <div>
-            <h4 className="mb-3 font-semibold text-gray-800">売上構成比</h4>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">新規患者</span>
-                <span className="font-medium">
-                  {((displayIndicators.newRevenue / displayIndicators.totalRevenue) * 100).toFixed(1)}%
-                </span>
+  return (
+    <div className="p-6 space-y-6">
+      {/* Clinic Selectors */}
+      <div className="flex items-center mb-6 space-x-4">
+        <div className="flex items-center space-x-2">
+          <label className="text-sm font-medium text-gray-700">院選択 (左):</label>
+          <select
+            value={leftClinic}
+            onChange={(e) => setLeftClinic(e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded-md"
+          >
+            {availableClinics.map(clinic => (
+              <option key={clinic} value={clinic}>{clinic}</option>
+            ))}
+          </select>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full" 
-                  style={{ width: `${(displayIndicators.newRevenue / displayIndicators.totalRevenue) * 100}%` }}
-                ></div>
+        <div className="flex items-center space-x-2">
+          <label className="text-sm font-medium text-gray-700">院選択 (右):</label>
+          <select
+            value={rightClinic}
+            onChange={(e) => setRightClinic(e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded-md"
+          >
+            {availableClinics.map(clinic => (
+              <option key={clinic} value={clinic}>{clinic}</option>
+            ))}
+          </select>
               </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">既存患者</span>
-                <span className="font-medium">
-                  {((displayIndicators.existingRevenue / displayIndicators.totalRevenue) * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full" 
-                  style={{ width: `${(displayIndicators.existingRevenue / displayIndicators.totalRevenue) * 100}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
+        <div className="flex items-center space-x-2">
+          <label className="text-sm font-medium text-gray-700">年間推移期間変更:</label>
+          <input
+            type="date"
+            value={dateRangeStart}
+            onChange={(e) => setDateRangeStart(e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded-md"
+          />
+          <span>〜</span>
+          <input
+            type="date"
+            value={dateRangeEnd}
+            onChange={(e) => setDateRangeEnd(e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded-md"
+          />
         </div>
       </div>
 
-      {/* 月別推移 */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">月別推移</h3>
-        <div className="space-y-4">
-          {monthlyTrends.map((month, index) => {
-            const previousMonth = index > 0 ? monthlyTrends[index - 1] : null
-            const revenueChange = previousMonth 
-              ? ((month.totalRevenue - previousMonth.totalRevenue) / previousMonth.totalRevenue) * 100
-              : 0
-
-            return (
-              <div key={`${month.year}-${month.month}`} className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-gray-900">
-                    {formatDate(new Date(month.year, month.month - 1, 1))}
-                  </h4>
-                  {previousMonth && (
-                    <div className="flex items-center space-x-2">
-                      {revenueChange > 0 ? (
-                        <TrendingUp className="w-4 h-4 text-green-500" />
-                      ) : revenueChange < 0 ? (
-                        <TrendingDown className="w-4 h-4 text-red-500" />
-                      ) : null}
-                      <span className={`text-sm font-medium ${
-                        revenueChange > 0 ? 'text-green-600' : 
-                        revenueChange < 0 ? 'text-red-600' : 'text-gray-600'
-                      }`}>
-                        {revenueChange > 0 ? '+' : ''}{revenueChange.toFixed(1)}%
-                      </span>
-                    </div>
-                  )}
+      {/* Summary Cards - Side by Side */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ClinicSummaryCards clinicName={leftClinic} metrics={leftMetrics} />
+        <ClinicSummaryCards clinicName={rightClinic} metrics={rightMetrics} />
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {formatCurrency(month.totalRevenue)}
-                    </div>
-                    <div className="text-sm text-gray-600">総売上</div>
+      {/* Annual Trend Charts - Side by Side */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ClinicTrendCharts clinicName={leftClinic} trends={leftTrends} />
+        <ClinicTrendCharts clinicName={rightClinic} trends={rightTrends} />
                   </div>
                   
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {formatNumber(month.totalCount)}
+      {/* Category Breakdown Tables - Side by Side */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="p-6 bg-white border rounded-lg shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">{leftClinic} / 大カテゴリー別</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50">
+                  <th className="px-3 py-2 font-semibold text-left">大カテゴ..</th>
+                  <th className="px-3 py-2 font-semibold text-right">売上_直近28日</th>
+                  <th className="px-3 py-2 font-semibold text-right">初診成約率</th>
+                  <th className="px-3 py-2 font-semibold text-right">会計単価</th>
+                  <th className="px-3 py-2 font-semibold text-right">売上比較28日</th>
+                  <th className="px-3 py-2 font-semibold text-right">売上比較前年28日</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const total = {
+                    category: '総計',
+                    sales28Days: leftCategories.reduce((sum, cat) => sum + cat.sales28Days, 0),
+                    firstVisitConversion: leftCategories.reduce((sum, cat) => sum + cat.sales28Days * cat.firstVisitConversion, 0) / leftCategories.reduce((sum, cat) => sum + cat.sales28Days, 0) || 0,
+                    unitPrice: leftCategories.reduce((sum, cat) => sum + cat.sales28Days, 0) / leftCategories.reduce((sum, cat) => sum + cat.sales28Days / cat.unitPrice || 0, 0) || 0,
+                    salesComparison28Days: leftCategories.reduce((sum, cat) => sum + cat.salesComparison28Days, 0),
+                    salesComparisonPrevYear: leftCategories.reduce((sum, cat) => sum + cat.salesComparisonPrevYear, 0)
+                  }
+                  const totalUnitPrice = leftCategories.reduce((sum, cat) => {
+                    const count = cat.sales28Days / cat.unitPrice || 0
+                    return sum + count
+                  }, 0)
+                  total.unitPrice = totalUnitPrice > 0 ? total.sales28Days / totalUnitPrice : 0
+
+                  return [
+                    <tr key="total" className="font-semibold border-b bg-gray-50">
+                      <td className="px-3 py-2">{total.category}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(total.sales28Days)}</td>
+                      <td className="px-3 py-2 text-right">{total.firstVisitConversion.toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(total.unitPrice)}</td>
+                      <td className={`px-3 py-2 text-right ${total.salesComparison28Days >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(total.salesComparison28Days)}
+                      </td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(total.salesComparisonPrevYear)}</td>
+                    </tr>,
+                    ...leftCategories.map((cat, idx) => (
+                      <tr key={idx} className="border-b hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium">{cat.category}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(cat.sales28Days)}</td>
+                        <td className="px-3 py-2 text-right">{cat.firstVisitConversion.toFixed(1)}%</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(cat.unitPrice)}</td>
+                        <td className={`px-3 py-2 text-right ${cat.salesComparison28Days >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(cat.salesComparison28Days)}
+                        </td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(cat.salesComparisonPrevYear)}</td>
+                      </tr>
+                    ))
+                  ]
+                })()}
+              </tbody>
+            </table>
                     </div>
-                    <div className="text-sm text-gray-600">総件数</div>
                   </div>
                   
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {formatNumber(month.newCount)}
-                    </div>
-                    <div className="text-sm text-gray-600">新規件数</div>
-                  </div>
-                  
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {formatNumber(month.existingCount)}
-                    </div>
-                    <div className="text-sm text-gray-600">既存件数</div>
-                  </div>
-                </div>
+        <div className="p-6 bg-white border rounded-lg shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">{rightClinic} / 大カテゴリー別</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50">
+                  <th className="px-3 py-2 font-semibold text-left">大カテゴ..</th>
+                  <th className="px-3 py-2 font-semibold text-right">売上_直近28日</th>
+                  <th className="px-3 py-2 font-semibold text-right">初診成約率</th>
+                  <th className="px-3 py-2 font-semibold text-right">会計単価</th>
+                  <th className="px-3 py-2 font-semibold text-right">売上比較28日</th>
+                  <th className="px-3 py-2 font-semibold text-right">売上比較前年28日</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const total = {
+                    category: '総計',
+                    sales28Days: rightCategories.reduce((sum, cat) => sum + cat.sales28Days, 0),
+                    firstVisitConversion: rightCategories.reduce((sum, cat) => sum + cat.sales28Days * cat.firstVisitConversion, 0) / rightCategories.reduce((sum, cat) => sum + cat.sales28Days, 0) || 0,
+                    unitPrice: 0,
+                    salesComparison28Days: rightCategories.reduce((sum, cat) => sum + cat.salesComparison28Days, 0),
+                    salesComparisonPrevYear: rightCategories.reduce((sum, cat) => sum + cat.salesComparisonPrevYear, 0)
+                  }
+                  const totalUnitPrice = rightCategories.reduce((sum, cat) => {
+                    const count = cat.sales28Days / cat.unitPrice || 0
+                    return sum + count
+                  }, 0)
+                  total.unitPrice = totalUnitPrice > 0 ? total.sales28Days / totalUnitPrice : 0
+
+                  return [
+                    <tr key="total" className="font-semibold border-b bg-gray-50">
+                      <td className="px-3 py-2">{total.category}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(total.sales28Days)}</td>
+                      <td className="px-3 py-2 text-right">{total.firstVisitConversion.toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(total.unitPrice)}</td>
+                      <td className={`px-3 py-2 text-right ${total.salesComparison28Days >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(total.salesComparison28Days)}
+                      </td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(total.salesComparisonPrevYear)}</td>
+                    </tr>,
+                    ...rightCategories.map((cat, idx) => (
+                      <tr key={idx} className="border-b hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium">{cat.category}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(cat.sales28Days)}</td>
+                        <td className="px-3 py-2 text-right">{cat.firstVisitConversion.toFixed(1)}%</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(cat.unitPrice)}</td>
+                        <td className={`px-3 py-2 text-right ${cat.salesComparison28Days >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(cat.salesComparison28Days)}
+                        </td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(cat.salesComparisonPrevYear)}</td>
+                      </tr>
+                    ))
+                  ]
+                })()}
+              </tbody>
+            </table>
               </div>
-            )
-          })}
         </div>
       </div>
     </div>

@@ -38,7 +38,7 @@ function MainContent() {
       />
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <Header onMenuClick={() => setSidebarOpen(true)} />
         
