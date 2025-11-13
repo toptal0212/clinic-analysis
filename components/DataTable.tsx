@@ -56,6 +56,7 @@ export default function DataTable({ data }: DataTableProps) {
 
         return {
           period: group.period,
+          periodKey: key, // Store the monthKey for easier sorting (format: "YYYY-MM")
           visits,
           revenue,
           avgPrice,
@@ -66,9 +67,8 @@ export default function DataTable({ data }: DataTableProps) {
         }
       })
       .sort((a, b) => {
-        const dateA = new Date(a.period)
-        const dateB = new Date(b.period)
-        return dateA.getTime() - dateB.getTime()
+        // Sort by periodKey (YYYY-MM format) for accurate date sorting
+        return a.periodKey.localeCompare(b.periodKey)
       })
   }, [state.apiConnected, state.data.dailyAccounts])
 
@@ -77,6 +77,20 @@ export default function DataTable({ data }: DataTableProps) {
     if (!sortField) return monthlyData
 
     return [...monthlyData].sort((a, b) => {
+      // Special handling for period/date sorting
+      if (sortField === 'period') {
+        // Use periodKey (YYYY-MM format) for accurate date sorting
+        if (a.periodKey && b.periodKey) {
+          return sortDirection === 'asc' 
+            ? a.periodKey.localeCompare(b.periodKey)
+            : b.periodKey.localeCompare(a.periodKey)
+        }
+        // Fallback to period string comparison if periodKey is not available
+        return sortDirection === 'asc' 
+          ? a.period.localeCompare(b.period)
+          : b.period.localeCompare(a.period)
+      }
+      
       const aValue = a[sortField as keyof typeof a]
       const bValue = b[sortField as keyof typeof b]
       
@@ -96,15 +110,100 @@ export default function DataTable({ data }: DataTableProps) {
     })
   }, [monthlyData, sortField, sortDirection])
 
+  // Sort patients and accounting data
+  const sortedPatientsData = useMemo(() => {
+    const patients = state.data.dailyAccounts || []
+    if (!sortField || viewMode !== 'patients') return patients
+
+    return [...patients].sort((a, b) => {
+      // Handle clinic sorting
+      if (sortField === 'clinic' || sortField === 'clinicName') {
+        const aClinic = a.clinicName || 'その他'
+        const bClinic = b.clinicName || 'その他'
+        return sortDirection === 'asc' 
+          ? aClinic.localeCompare(bClinic, 'ja')
+          : bClinic.localeCompare(aClinic, 'ja')
+      }
+      
+      // Handle date sorting
+      if (sortField === 'recordDate' || sortField === 'date') {
+        const aDate = new Date(a.recordDate || 0)
+        const bDate = new Date(b.recordDate || 0)
+        return sortDirection === 'asc' 
+          ? aDate.getTime() - bDate.getTime()
+          : bDate.getTime() - aDate.getTime()
+      }
+      
+      const aValue = a[sortField as keyof typeof a]
+      const bValue = b[sortField as keyof typeof b]
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue, 'ja')
+          : bValue.localeCompare(aValue, 'ja')
+      }
+      
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue
+      }
+      
+      return 0
+    })
+  }, [state.data.dailyAccounts, sortField, sortDirection, viewMode])
+
+  const sortedAccountingData = useMemo(() => {
+    const accounting = state.data.dailyAccounts || []
+    if (!sortField || viewMode !== 'accounting') return accounting
+
+    return [...accounting].sort((a, b) => {
+      // Handle clinic sorting
+      if (sortField === 'clinic' || sortField === 'clinicName') {
+        const aClinic = a.clinicName || 'その他'
+        const bClinic = b.clinicName || 'その他'
+        return sortDirection === 'asc' 
+          ? aClinic.localeCompare(bClinic, 'ja')
+          : bClinic.localeCompare(aClinic, 'ja')
+      }
+      
+      // Handle date sorting
+      if (sortField === 'recordDate' || sortField === 'date') {
+        const aDate = new Date(a.recordDate || 0)
+        const bDate = new Date(b.recordDate || 0)
+        return sortDirection === 'asc' 
+          ? aDate.getTime() - bDate.getTime()
+          : bDate.getTime() - aDate.getTime()
+      }
+      
+      const aValue = a[sortField as keyof typeof a]
+      const bValue = b[sortField as keyof typeof b]
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue, 'ja')
+          : bValue.localeCompare(aValue, 'ja')
+      }
+      
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue
+      }
+      
+      return 0
+    })
+  }, [state.data.dailyAccounts, sortField, sortDirection, viewMode])
+
   // Get data source based on view mode
   const getDataSource = () => {
     switch (viewMode) {
       case 'summary':
         return sortedData
       case 'patients':
-        return state.data.dailyAccounts || []
+        return sortedPatientsData
       case 'accounting':
-        return state.data.dailyAccounts || []
+        return sortedAccountingData
       default:
         return []
     }
@@ -311,6 +410,12 @@ export default function DataTable({ data }: DataTableProps) {
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   来院者ID
                 </th>
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('clinicName')}
+                >
+                  院 {getSortIcon('clinicName')}
+                </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   氏名
                 </th>
@@ -320,8 +425,11 @@ export default function DataTable({ data }: DataTableProps) {
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   性別
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  来院日
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('recordDate')}
+                >
+                  来院日 {getSortIcon('recordDate')}
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   初診/再診
@@ -329,8 +437,11 @@ export default function DataTable({ data }: DataTableProps) {
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   流入元
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  売上
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('totalWithTax')}
+                >
+                  売上 {getSortIcon('totalWithTax')}
                 </th>
               </tr>
             </thead>
@@ -340,6 +451,9 @@ export default function DataTable({ data }: DataTableProps) {
                   <tr key={record.visitorId || index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                       {record.visitorId || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                      {record.clinicName || 'その他'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
                       {record.visitorName || 'N/A'}
@@ -366,7 +480,7 @@ export default function DataTable({ data }: DataTableProps) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-sm text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-sm text-center text-gray-500">
                     {state.apiConnected ? 'データがありません' : 'データ接続が必要です'}
                   </td>
                 </tr>
@@ -385,23 +499,41 @@ export default function DataTable({ data }: DataTableProps) {
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   来院者ID
                 </th>
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('clinicName')}
+                >
+                  院 {getSortIcon('clinicName')}
+                </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   氏名
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  総額（税込）
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('totalWithTax')}
+                >
+                  総額（税込） {getSortIcon('totalWithTax')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  総額（税抜）
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('netTotal')}
+                >
+                  総額（税抜） {getSortIcon('netTotal')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  来院日
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('recordDate')}
+                >
+                  来院日 {getSortIcon('recordDate')}
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   支払い方法
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  割引額
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('otherDiscountPrice')}
+                >
+                  割引額 {getSortIcon('otherDiscountPrice')}
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   備考
@@ -414,6 +546,9 @@ export default function DataTable({ data }: DataTableProps) {
                   <tr key={record.visitorId || index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                       {record.visitorId || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                      {record.clinicName || 'その他'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
                       {record.visitorName || 'N/A'}
@@ -440,7 +575,7 @@ export default function DataTable({ data }: DataTableProps) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-sm text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-sm text-center text-gray-500">
                     {state.apiConnected ? 'データがありません' : 'データ接続が必要です'}
                   </td>
                 </tr>

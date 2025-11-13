@@ -34,6 +34,12 @@ export default function StaffSales() {
   const [doctorPage, setDoctorPage] = useState(1)
   const [counselorPage, setCounselorPage] = useState(1)
   const itemsPerPage = 10
+  const [clinicSortField, setClinicSortField] = useState<string>('total')
+  const [clinicSortDirection, setClinicSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [doctorSortField, setDoctorSortField] = useState<string>('total')
+  const [doctorSortDirection, setDoctorSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [counselorSortField, setCounselorSortField] = useState<string>('total')
+  const [counselorSortDirection, setCounselorSortDirection] = useState<'asc' | 'desc'>('desc')
 
   // last 12 months labels (YYYY/MM)
   const months = useMemo(() => {
@@ -142,9 +148,121 @@ export default function StaffSales() {
       clinicMap.get(c)![idx] += amount
     })
     const rows = Array.from(clinicMap.entries()).map(([c,arr])=>({ clinic:c, arr, total: arr.reduce((a,b)=>a+b,0) }))
-    rows.sort((a,b)=>b.total-a.total)
     return rows
   }, [all, months])
+
+  // Sort clinic rows
+  const sortedClinicRows = useMemo(() => {
+    const sorted = [...clinicRows]
+    sorted.sort((a, b) => {
+      if (clinicSortField === 'clinic') {
+        return clinicSortDirection === 'asc' 
+          ? a.clinic.localeCompare(b.clinic, 'ja')
+          : b.clinic.localeCompare(a.clinic, 'ja')
+      }
+      if (clinicSortField === 'total') {
+        return clinicSortDirection === 'asc' 
+          ? a.total - b.total
+          : b.total - a.total
+      }
+      // Sort by specific month
+      const monthIndex = parseInt(clinicSortField)
+      if (!isNaN(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
+        return clinicSortDirection === 'asc' 
+          ? a.arr[monthIndex] - b.arr[monthIndex]
+          : b.arr[monthIndex] - a.arr[monthIndex]
+      }
+      return 0
+    })
+    return sorted
+  }, [clinicRows, clinicSortField, clinicSortDirection])
+
+  // Sort doctor rows
+  const sortedDoctorRows = useMemo(() => {
+    const sorted = [...doctorRows]
+    sorted.sort((a, b) => {
+      if (doctorSortField === 'name') {
+        return doctorSortDirection === 'asc' 
+          ? a.name.localeCompare(b.name, 'ja')
+          : b.name.localeCompare(a.name, 'ja')
+      }
+      if (doctorSortField === 'total') {
+        return doctorSortDirection === 'asc' 
+          ? a.total - b.total
+          : b.total - a.total
+      }
+      // Sort by specific month
+      const monthIndex = parseInt(doctorSortField)
+      if (!isNaN(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
+        return doctorSortDirection === 'asc' 
+          ? a.arr[monthIndex] - b.arr[monthIndex]
+          : b.arr[monthIndex] - a.arr[monthIndex]
+      }
+      return 0
+    })
+    return sorted
+  }, [doctorRows, doctorSortField, doctorSortDirection])
+
+  // Sort counselor rows
+  const sortedCounselorRows = useMemo(() => {
+    const sorted = [...counselorRows]
+    sorted.sort((a, b) => {
+      if (counselorSortField === 'name') {
+        return counselorSortDirection === 'asc' 
+          ? a.name.localeCompare(b.name, 'ja')
+          : b.name.localeCompare(a.name, 'ja')
+      }
+      if (counselorSortField === 'total') {
+        return counselorSortDirection === 'asc' 
+          ? a.total - b.total
+          : b.total - a.total
+      }
+      // Sort by specific month
+      const monthIndex = parseInt(counselorSortField)
+      if (!isNaN(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
+        return counselorSortDirection === 'asc' 
+          ? a.arr[monthIndex] - b.arr[monthIndex]
+          : b.arr[monthIndex] - a.arr[monthIndex]
+      }
+      return 0
+    })
+    return sorted
+  }, [counselorRows, counselorSortField, counselorSortDirection])
+
+  const getSortIcon = (field: string, currentField: string, direction: 'asc' | 'desc') => {
+    if (currentField !== field) return '↕️'
+    return direction === 'asc' ? '↑' : '↓'
+  }
+
+  const handleClinicSort = (field: string) => {
+    if (clinicSortField === field) {
+      setClinicSortDirection(clinicSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setClinicSortField(field)
+      setClinicSortDirection('desc')
+    }
+    setClinicPage(1)
+  }
+
+  const handleDoctorSort = (field: string) => {
+    if (doctorSortField === field) {
+      setDoctorSortDirection(doctorSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setDoctorSortField(field)
+      setDoctorSortDirection('desc')
+    }
+    setDoctorPage(1)
+  }
+
+  const handleCounselorSort = (field: string) => {
+    if (counselorSortField === field) {
+      setCounselorSortDirection(counselorSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setCounselorSortField(field)
+      setCounselorSortDirection('desc')
+    }
+    setCounselorPage(1)
+  }
 
   if (all.length === 0) {
     return (
@@ -172,13 +290,29 @@ export default function StaffSales() {
             <table className="min-w-full text-xs">
               <thead>
                 <tr>
-                  <th className="px-2 py-1 text-left">院名</th>
-                  {months.map(m=>(<th key={m.label} className="px-2 py-1 text-right">{m.label}</th>))}
-                  <th className="px-2 py-1 text-right">計</th>
+                  <th 
+                    className="px-2 py-1 text-left cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleClinicSort('clinic')}
+                  >
+                    院名 {getSortIcon('clinic', clinicSortField, clinicSortDirection)}
+                  </th>
+                  {months.map((m, idx)=>(<th 
+                    key={m.label} 
+                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleClinicSort(String(idx))}
+                  >
+                    {m.label} {getSortIcon(String(idx), clinicSortField, clinicSortDirection)}
+                  </th>))}
+                  <th 
+                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleClinicSort('total')}
+                  >
+                    計 {getSortIcon('total', clinicSortField, clinicSortDirection)}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {(clinicRows.length > itemsPerPage ? clinicRows.slice((clinicPage-1)*itemsPerPage, clinicPage*itemsPerPage) : clinicRows).map((row,i)=> (
+                {(sortedClinicRows.length > itemsPerPage ? sortedClinicRows.slice((clinicPage-1)*itemsPerPage, clinicPage*itemsPerPage) : sortedClinicRows).map((row,i)=> (
                   <tr key={i} className="border-t">
                     <td className="px-2 py-1">{row.clinic}</td>
                     {row.arr.map((v,j)=>(<td key={j} className="px-2 py-1 text-right">{Math.round(v).toLocaleString()}</td>))}
@@ -188,12 +322,12 @@ export default function StaffSales() {
               </tbody>
             </table>
           </div>
-          {clinicRows.length > itemsPerPage && (
+          {sortedClinicRows.length > itemsPerPage && (
             <Pagination
               currentPage={clinicPage}
-              totalPages={Math.ceil(clinicRows.length / itemsPerPage)}
+              totalPages={Math.ceil(sortedClinicRows.length / itemsPerPage)}
               onPageChange={setClinicPage}
-              totalItems={clinicRows.length}
+              totalItems={sortedClinicRows.length}
               itemsPerPage={itemsPerPage}
             />
           )}
@@ -208,13 +342,29 @@ export default function StaffSales() {
             <table className="min-w-full text-xs">
               <thead>
                 <tr>
-                  <th className="px-2 py-1 text-left">担当者</th>
-                  {months.map(m=>(<th key={m.label} className="px-2 py-1 text-right">{m.label}</th>))}
-                  <th className="px-2 py-1 text-right">計</th>
+                  <th 
+                    className="px-2 py-1 text-left cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleDoctorSort('name')}
+                  >
+                    担当者 {getSortIcon('name', doctorSortField, doctorSortDirection)}
+                  </th>
+                  {months.map((m, idx)=>(<th 
+                    key={m.label} 
+                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleDoctorSort(String(idx))}
+                  >
+                    {m.label} {getSortIcon(String(idx), doctorSortField, doctorSortDirection)}
+                  </th>))}
+                  <th 
+                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleDoctorSort('total')}
+                  >
+                    計 {getSortIcon('total', doctorSortField, doctorSortDirection)}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {(doctorRows.length > itemsPerPage ? doctorRows.slice((doctorPage-1)*itemsPerPage, doctorPage*itemsPerPage) : doctorRows).map((row,i)=> (
+                {(sortedDoctorRows.length > itemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*itemsPerPage, doctorPage*itemsPerPage) : sortedDoctorRows).map((row,i)=> (
                   <tr key={i} className="border-t">
                     <td className="px-2 py-1">{row.name}</td>
                     {row.arr.map((v,j)=>(<td key={j} className="px-2 py-1 text-right">{Math.round(v).toLocaleString()}</td>))}
@@ -224,12 +374,12 @@ export default function StaffSales() {
               </tbody>
             </table>
           </div>
-          {doctorRows.length > itemsPerPage && (
+          {sortedDoctorRows.length > itemsPerPage && (
             <Pagination
               currentPage={doctorPage}
-              totalPages={Math.ceil(doctorRows.length / itemsPerPage)}
+              totalPages={Math.ceil(sortedDoctorRows.length / itemsPerPage)}
               onPageChange={setDoctorPage}
-              totalItems={doctorRows.length}
+              totalItems={sortedDoctorRows.length}
               itemsPerPage={itemsPerPage}
             />
           )}
@@ -242,13 +392,29 @@ export default function StaffSales() {
             <table className="min-w-full text-xs">
               <thead>
                 <tr>
-                  <th className="px-2 py-1 text-left">担当者</th>
-                  {months.map(m=>(<th key={m.label} className="px-2 py-1 text-right">{m.label}</th>))}
-                  <th className="px-2 py-1 text-right">計</th>
+                  <th 
+                    className="px-2 py-1 text-left cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleCounselorSort('name')}
+                  >
+                    担当者 {getSortIcon('name', counselorSortField, counselorSortDirection)}
+                  </th>
+                  {months.map((m, idx)=>(<th 
+                    key={m.label} 
+                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleCounselorSort(String(idx))}
+                  >
+                    {m.label} {getSortIcon(String(idx), counselorSortField, counselorSortDirection)}
+                  </th>))}
+                  <th 
+                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleCounselorSort('total')}
+                  >
+                    計 {getSortIcon('total', counselorSortField, counselorSortDirection)}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {(counselorRows.length > itemsPerPage ? counselorRows.slice((counselorPage-1)*itemsPerPage, counselorPage*itemsPerPage) : counselorRows).map((row,i)=> (
+                {(sortedCounselorRows.length > itemsPerPage ? sortedCounselorRows.slice((counselorPage-1)*itemsPerPage, counselorPage*itemsPerPage) : sortedCounselorRows).map((row,i)=> (
                   <tr key={i} className="border-t">
                     <td className="px-2 py-1">{row.name}</td>
                     {row.arr.map((v,j)=>(<td key={j} className="px-2 py-1 text-right">{Math.round(v).toLocaleString()}</td>))}
@@ -258,12 +424,12 @@ export default function StaffSales() {
               </tbody>
             </table>
           </div>
-          {counselorRows.length > itemsPerPage && (
+          {sortedCounselorRows.length > itemsPerPage && (
             <Pagination
               currentPage={counselorPage}
-              totalPages={Math.ceil(counselorRows.length / itemsPerPage)}
+              totalPages={Math.ceil(sortedCounselorRows.length / itemsPerPage)}
               onPageChange={setCounselorPage}
-              totalItems={counselorRows.length}
+              totalItems={sortedCounselorRows.length}
               itemsPerPage={itemsPerPage}
             />
           )}

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useReducer, ReactNode } from 'react'
 import { MedicalForceAPI, DataProcessor } from '@/lib/api'
+import { saveDashboardChunks, loadAllDashboardChunks } from '@/lib/indexedDb'
 
 // Types
 export interface DashboardState {
@@ -222,10 +223,231 @@ const DashboardContext = createContext<{
 
 // Provider
 export function DashboardProvider({ children }: { children: ReactNode }) {
+  // Start with initial state to avoid hydration mismatch
+  // We'll restore from localStorage in useEffect (client-side only)
   const [state, dispatch] = useReducer(dashboardReducer, initialState)
   const api = new MedicalForceAPI()
   const dataProcessor = new DataProcessor()
+  const dataReloadAttemptedRef = React.useRef(false)
 
+  // Load state from IndexedDB/localStorage after hydration (client-side only)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    let cancelled = false
+
+    const restoreFromIndexedDb = async () => {
+      try {
+        const chunks = await loadAllDashboardChunks()
+        if (cancelled) return false
+
+        const meta = chunks.meta
+        if (meta && meta.apiConnected === true && meta.dataSource === 'api') {
+          console.log('📦 [IndexedDB] Restoring dashboard state from IndexedDB')
+
+          dispatch({
+            type: 'SET_API_CONNECTION',
+            payload: {
+              connected: true,
+              apiKey: meta.apiKey || 'all-clinics',
+              dataSource: 'api',
+              dateRange: meta.dateRange || initialState.dateRange,
+              clinicId: meta.currentClinic?.id || 'all',
+              clinicName: meta.currentClinic?.name || '全院'
+            }
+          })
+
+          if (meta.selectedPeriod) dispatch({ type: 'SET_PERIOD', payload: meta.selectedPeriod })
+          if (meta.selectedClinic) dispatch({ type: 'SET_CLINIC', payload: meta.selectedClinic })
+          if (meta.filters) dispatch({ type: 'SET_FILTERS', payload: meta.filters })
+
+          const metrics = chunks.metrics
+          if (metrics?.currentMonthMetrics) {
+            dispatch({ type: 'SET_CURRENT_MONTH_METRICS', payload: metrics.currentMonthMetrics })
+          }
+          if (metrics?.trendData) {
+            dispatch({ type: 'SET_TREND_DATA', payload: metrics.trendData })
+          }
+          if (metrics?.demographics) {
+            dispatch({ type: 'SET_DEMOGRAPHICS', payload: metrics.demographics })
+          }
+
+          const defaultClinicData = initialState.data.clinicData
+          const clinicChunk = chunks.clinicData?.clinicData || {}
+
+          const restoredData = {
+            dailyAccounts: chunks.dailyAccounts?.dailyAccounts || [],
+            patients: chunks.processed?.patients || [],
+            accounting: chunks.processed?.accounting || [],
+            appointments: chunks.other?.appointments || [],
+            services: chunks.other?.services || [],
+            brandCourses: chunks.other?.brandCourses || [],
+            clinicData: {
+              yokohama: clinicChunk.yokohama || defaultClinicData.yokohama,
+              koriyama: clinicChunk.koriyama || defaultClinicData.koriyama,
+              mito: clinicChunk.mito || defaultClinicData.mito,
+              omiya: clinicChunk.omiya || defaultClinicData.omiya
+            }
+          }
+
+          if (restoredData.dailyAccounts.length > 0) {
+            dispatch({ type: 'SET_DATA', payload: restoredData })
+            dataReloadAttemptedRef.current = true
+            console.log(`✅ [IndexedDB] Restored ${restoredData.dailyAccounts.length} daily accounts`)
+          } else {
+            console.log('⚠️ [IndexedDB] Connection restored but no data found')
+          }
+
+          return true
+        }
+      } catch (error) {
+        console.error('📦 [IndexedDB] Failed to load dashboard state:', error)
+      }
+
+      return false
+    }
+
+    const restoreFromLegacyLocalStorage = () => {
+      try {
+        const oldStored = localStorage.getItem('dashboard_state')
+        if (!oldStored) return
+
+        const parsed = JSON.parse(oldStored)
+        const storedTime = parsed._timestamp || 0
+        const now = Date.now()
+        const hoursSinceStored = (now - storedTime) / (1000 * 60 * 60)
+
+        const hasData = parsed._dataAvailable === true ||
+                        (parsed.data?.dailyAccounts && parsed.data.dailyAccounts.length > 0) ||
+                        (parsed.data?.dailyAccountsCount > 0)
+
+        if (hoursSinceStored < 24 && parsed.apiConnected === true && parsed.dataSource === 'api' && hasData) {
+          console.log('📦 [Storage] Restoring dashboard state from legacy localStorage')
+
+          dispatch({
+            type: 'SET_API_CONNECTION',
+            payload: {
+              connected: true,
+              apiKey: parsed.apiKey || 'all-clinics',
+              dataSource: 'api',
+              dateRange: parsed.dateRange || initialState.dateRange,
+              clinicId: parsed.currentClinic?.id || 'all',
+              clinicName: parsed.currentClinic?.name || '全院'
+            }
+          })
+
+          if (parsed.selectedPeriod) dispatch({ type: 'SET_PERIOD', payload: parsed.selectedPeriod })
+          if (parsed.selectedClinic) dispatch({ type: 'SET_CLINIC', payload: parsed.selectedClinic })
+          if (parsed.filters) dispatch({ type: 'SET_FILTERS', payload: parsed.filters })
+          if (parsed.currentMonthMetrics) dispatch({ type: 'SET_CURRENT_MONTH_METRICS', payload: parsed.currentMonthMetrics })
+          if (parsed.trendData) dispatch({ type: 'SET_TREND_DATA', payload: parsed.trendData })
+          if (parsed.demographics) dispatch({ type: 'SET_DEMOGRAPHICS', payload: parsed.demographics })
+
+          if (parsed.data && parsed.data.dailyAccounts && Array.isArray(parsed.data.dailyAccounts) && parsed.data.dailyAccounts.length > 0) {
+            dispatch({ type: 'SET_DATA', payload: parsed.data })
+            dataReloadAttemptedRef.current = true
+            console.log(`✅ [Storage] Restored ${parsed.data.dailyAccounts.length} daily accounts from legacy storage`)
+          }
+        }
+      } catch (error) {
+        console.error('📦 [Storage] Failed to load legacy localStorage state:', error)
+      }
+    }
+
+    ;(async () => {
+      const restored = await restoreFromIndexedDb()
+      if (cancelled) return
+      if (!restored) {
+        restoreFromLegacyLocalStorage()
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+
+  // Save state to IndexedDB whenever it changes
+  React.useEffect(() => {
+    if (!state.apiConnected || state.dataSource !== 'api') return
+    if (state.data.dailyAccounts.length === 0) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const timestamp = Date.now()
+
+        await saveDashboardChunks({
+          meta: {
+            apiConnected: state.apiConnected,
+            apiKey: state.apiKey,
+            dataSource: state.dataSource,
+            currentClinic: state.currentClinic,
+            dateRange: state.dateRange,
+            selectedPeriod: state.selectedPeriod,
+            selectedClinic: state.selectedClinic,
+            filters: state.filters,
+            _timestamp: timestamp
+          },
+          metrics: {
+            currentMonthMetrics: state.currentMonthMetrics,
+            trendData: state.trendData,
+            demographics: state.demographics,
+            _timestamp: timestamp
+          },
+          dailyAccounts: {
+            dailyAccounts: state.data.dailyAccounts,
+            _timestamp: timestamp
+          },
+          processed: {
+            patients: state.data.patients,
+            accounting: state.data.accounting,
+            _timestamp: timestamp
+          },
+          clinicData: {
+            clinicData: state.data.clinicData,
+            _timestamp: timestamp
+          },
+          other: {
+            appointments: state.data.appointments,
+            services: state.data.services,
+            brandCourses: state.data.brandCourses,
+            _timestamp: timestamp
+          }
+        })
+
+        if (!cancelled) {
+          localStorage.setItem('dashboard_data_timestamp', String(timestamp))
+        }
+
+        console.log('💾 [IndexedDB] Dashboard data saved')
+      } catch (error) {
+        console.error('💾 [IndexedDB] Failed to save dashboard data:', error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    state.apiConnected,
+    state.dataSource,
+    state.dateRange.start,
+    state.dateRange.end,
+    state.selectedPeriod,
+    state.selectedClinic,
+    state.filters,
+    state.currentMonthMetrics,
+    state.data.dailyAccounts,
+    state.data.patients,
+    state.data.accounting,
+    state.data.clinicData,
+    state.data.appointments,
+    state.data.services,
+    state.data.brandCourses
+  ])
 
   // Check token status every 5 minutes when API is connected
   React.useEffect(() => {
@@ -687,7 +909,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!state.apiConnected) {
       throw new Error('APIが接続されていません')
     }
@@ -709,12 +931,37 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false })
     }
-  }
+  }, [state.apiConnected, state.dataSource, state.dateRange.start, state.dateRange.end])
 
   const refreshData = async () => {
     await loadData()
   }
 
+  // Auto-reload data ONLY if connection restored but no data is available locally
+  React.useEffect(() => {
+    if (dataReloadAttemptedRef.current) return
+    if (!state.apiConnected || state.dataSource !== 'api') return
+    if (state.data.dailyAccounts.length > 0) {
+      dataReloadAttemptedRef.current = true
+      return
+    }
+
+    console.log('🔄 [Storage] No local data available - reloading from API')
+    dataReloadAttemptedRef.current = true
+
+    const reloadTimer = setTimeout(async () => {
+      try {
+        if (state.data.dailyAccounts.length === 0) {
+          await loadData()
+          console.log('✅ [Storage] Data reloaded successfully from API')
+        }
+      } catch (error) {
+        console.error('❌ [Storage] Failed to reload data:', error)
+      }
+    }, 2000)
+
+    return () => clearTimeout(reloadTimer)
+  }, [state.apiConnected, state.dataSource, state.data.dailyAccounts.length, loadData])
 
   return (
     <DashboardContext.Provider value={{ 

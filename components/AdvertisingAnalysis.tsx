@@ -61,6 +61,8 @@ export default function AdvertisingAnalysis() {
   } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<string>('')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // 期間に基づく日付計算
   const getDateRange = (period: string) => {
@@ -185,6 +187,52 @@ export default function AdvertisingAnalysis() {
       selectedPlatform === 'all' || campaign.platform === selectedPlatform
     )
   }, [allCampaigns, selectedPlatform, advertisingData])
+
+  // ソートされたキャンペーンデータ
+  const sortedCampaigns = useMemo(() => {
+    if (!sortField) return filteredCampaigns
+
+    return [...filteredCampaigns].sort((a, b) => {
+      const aValue = a[sortField as keyof AdCampaign]
+      const bValue = b[sortField as keyof AdCampaign]
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue, 'ja')
+          : bValue.localeCompare(aValue, 'ja')
+      }
+      
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue
+      }
+      
+      if (aValue instanceof Date && bValue instanceof Date) {
+        return sortDirection === 'asc' 
+          ? aValue.getTime() - bValue.getTime()
+          : bValue.getTime() - aValue.getTime()
+      }
+      
+      return 0
+    })
+  }, [filteredCampaigns, sortField, sortDirection])
+
+  // ソートハンドラー
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  // ソートアイコン取得
+  const getSortIcon = (field: string) => {
+    if (sortField !== field) return '↕️'
+    return sortDirection === 'asc' ? '↑' : '↓'
+  }
 
   // 総合メトリクス
   const totalMetrics = useMemo(() => {
@@ -407,34 +455,58 @@ export default function AdvertisingAnalysis() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  キャンペーン名
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('name')}
+                >
+                  キャンペーン名 {getSortIcon('name')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  プラットフォーム
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('platform')}
+                >
+                  プラットフォーム {getSortIcon('platform')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  広告費
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('spent')}
+                >
+                  広告費 {getSortIcon('spent')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  売上
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('revenue')}
+                >
+                  売上 {getSortIcon('revenue')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  ROAS
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('roas')}
+                >
+                  ROAS {getSortIcon('roas')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  CTR
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('ctr')}
+                >
+                  CTR {getSortIcon('ctr')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  CPC
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('cpc')}
+                >
+                  CPC {getSortIcon('cpc')}
                 </th>
-                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  コンバージョン
+                <th 
+                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('conversions')}
+                >
+                  コンバージョン {getSortIcon('conversions')}
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredCampaigns.map((campaign) => (
+              {sortedCampaigns.map((campaign) => (
                 <tr key={campaign.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{campaign.name}</div>
