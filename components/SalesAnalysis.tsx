@@ -15,26 +15,13 @@ import DemographicsCharts from './DemographicsCharts'
 export default function SalesAnalysis() {
   const { state } = useDashboard()
 
-  // Get all daily accounts data from all sources
+  // Get all daily accounts data - use only main dailyAccounts to avoid duplication
+  // state.data.dailyAccounts already contains combined data from all clinics
   const getAllDailyAccounts = () => {
-    const allData = []
-    
-    // Add data from main dailyAccounts
     if (state.data?.dailyAccounts && Array.isArray(state.data.dailyAccounts)) {
-      allData.push(...state.data.dailyAccounts)
+      return state.data.dailyAccounts
     }
-    
-    // Add data from clinic-specific dailyAccounts
-    if (state.data?.clinicData) {
-      Object.values(state.data.clinicData).forEach((clinic: any) => {
-        if (clinic?.dailyAccounts && Array.isArray(clinic.dailyAccounts)) {
-          allData.push(...clinic.dailyAccounts)
-        }
-      })
-    }
-    
-    console.log('📊 [SalesAnalysis] Total daily accounts:', allData.length)
-    return allData
+    return []
   }
 
   // No dummy generation: rely only on API/CSV data present in DashboardContext

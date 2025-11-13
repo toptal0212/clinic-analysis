@@ -153,6 +153,27 @@ export default function Cancellation() {
     </div>
   )
 
+  // Check if there's any cancellation data
+  const hasCancellationData = useMemo(() => {
+    return all.some(r => {
+      const cancelAmount = (r.cancelPriceWithTax || 0) + (r.refundPriceWithTax || 0) + (r.coolingoffPriceWithTax || 0)
+      return cancelAmount > 0
+    })
+  }, [all])
+
+  // Show empty state if no cancellation data
+  if (!hasCancellationData) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
+          <p className="text-sm text-gray-600">
+            📊 予約キャンセルのデータがありません。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">

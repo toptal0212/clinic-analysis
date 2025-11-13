@@ -53,6 +53,20 @@ export default function ClinicComparison() {
     return Array.from(clinics).sort()
   }, [state.data.dailyAccounts, state.data.clinicData])
 
+  // Initialize clinic selections with first available clinics when data is available
+  React.useEffect(() => {
+    if (availableClinics.length > 0) {
+      if (!leftClinic && availableClinics[0]) {
+        setLeftClinic(availableClinics[0])
+      }
+      if (!rightClinic && availableClinics.length > 1 && availableClinics[1]) {
+        setRightClinic(availableClinics[1])
+      } else if (!rightClinic && availableClinics[0]) {
+        setRightClinic(availableClinics[0])
+      }
+    }
+  }, [availableClinics, leftClinic, rightClinic])
+
   // Resolve selected clinics with fallback to first two available
   const resolvedLeftClinic = useMemo(() => {
     if (leftClinic && availableClinics.includes(leftClinic)) return leftClinic
