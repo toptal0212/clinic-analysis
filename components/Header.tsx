@@ -11,10 +11,14 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
-  const { state, connectToApi, refreshData } = useDashboard()
+  const { state, connectToApi, refreshData, dispatch } = useDashboard()
   const [showApiModal, setShowApiModal] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
+  const [pendingClinic, setPendingClinic] = useState(state.selectedClinic)
+  const [pendingStart, setPendingStart] = useState(state.dateRange.start)
+  const [pendingEnd, setPendingEnd] = useState(state.dateRange.end)
+  const [filterError, setFilterError] = useState('')
 
   const handleRefresh = async () => {
     if (!state.apiConnected) return
@@ -30,6 +34,50 @@ export default function Header({ onMenuClick }: HeaderProps) {
       setRefreshing(false)
     }
   }
+
+  const handleClinicChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setPendingClinic(e.target.value)
+    setFilterError('')
+  }
+
+  const handleDateChange = (field: 'start' | 'end') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (field === 'start') {
+      setPendingStart(e.target.value)
+    } else {
+      setPendingEnd(e.target.value)
+    }
+    setFilterError('')
+  }
+
+  const handleApplyFilters = () => {
+    if (!pendingStart || !pendingEnd) {
+      setFilterError('期間を入力してください')
+      return
+    }
+
+    const startDate = new Date(pendingStart)
+    const endDate = new Date(pendingEnd)
+    if (startDate > endDate) {
+      setFilterError('終了日は開始日より後にしてください')
+      return
+    }
+
+    dispatch({ type: 'SET_CLINIC', payload: pendingClinic })
+    dispatch({
+      type: 'SET_DATE_RANGE',
+      payload: { start: pendingStart, end: pendingEnd }
+    })
+    setFilterError('')
+  }
+
+  useEffect(() => {
+    setPendingClinic(state.selectedClinic)
+  }, [state.selectedClinic])
+
+  useEffect(() => {
+    setPendingStart(state.dateRange.start)
+    setPendingEnd(state.dateRange.end)
+  }, [state.dateRange.start, state.dateRange.end])
 
   // Set initial update time when API connects
   useEffect(() => {
@@ -61,14 +109,50 @@ export default function Header({ onMenuClick }: HeaderProps) {
           </div>
         </div>
 
-        {/* Center */}
+        {/* Center - global filters */}
         <div className="items-center hidden space-x-4 md:flex">
-          <div className="relative">
-            <select className="text-sm font-medium text-gray-700 bg-transparent border-none appearance-none focus:outline-none">
-              <option>MENU</option>
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-500">院選択:</span>
+            <select
+              value={pendingClinic}
+              onChange={handleClinicChange}
+              className="px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">全院</option>
+              <option value="yokohama">横浜院</option>
+              <option value="koriyama">郡山院</option>
+              <option value="mito">水戸院</option>
+              <option value="omiya">大宮院</option>
             </select>
           </div>
+
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-500">期間:</span>
+            <input
+              type="date"
+              value={pendingStart}
+              onChange={handleDateChange('start')}
+              className="px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-400">〜</span>
+            <input
+              type="date"
+              value={pendingEnd}
+              onChange={handleDateChange('end')}
+              className="px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <button
+            onClick={handleApplyFilters}
+            className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            フィルター適用
+          </button>
         </div>
+        {filterError && (
+          <div className="hidden text-xs text-red-500 md:block">{filterError}</div>
+        )}
 
         {/* Right side */}
         <div className="flex items-center space-x-4">

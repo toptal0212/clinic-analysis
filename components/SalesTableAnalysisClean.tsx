@@ -7,7 +7,6 @@ import {
   Users, 
   TrendingUp, 
   Calendar,
-  Building2,
   Table,
   CheckCircle,
   AlertCircle
@@ -21,7 +20,6 @@ interface SalesTableAnalysisProps {
 export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProps) {
   const { state } = useDashboard()
   const [selectedMonth, setSelectedMonth] = useState<string>('')
-  const [selectedHospital, setSelectedHospital] = useState<string>('all')
 
   // Extract available months from data
   const availableMonths = useMemo(() => {
@@ -43,15 +41,6 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
     return Array.from(months).sort().reverse()
   }, [state.data.dailyAccounts])
 
-  // Hospital options
-  const hospitalOptions = [
-    { id: 'all', name: '全院' },
-    { id: 'yokohama', name: '横浜院' },
-    { id: 'koriyama', name: '郡山院' },
-    { id: 'mito', name: '水戸院' },
-    { id: 'omiya', name: '大宮院' }
-  ]
-
   // Calculate sales metrics
   const salesMetrics = useMemo(() => {
     if (!state.data.dailyAccounts?.length || !selectedMonth) return null
@@ -66,11 +55,6 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
       const recordMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       return recordMonth === selectedMonth
     })
-
-    if (selectedHospital !== 'all') {
-      // Filter by hospital if specific hospital is selected
-      // This would need to be implemented based on your data structure
-    }
 
     // Calculate metrics based on business rules
     const newPatients = targetMonthData.filter(record => {
@@ -141,7 +125,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
         sameDayUnitPrice: 0
       }
     }
-  }, [state.data.dailyAccounts, selectedMonth, selectedHospital])
+  }, [state.data.dailyAccounts, selectedMonth])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -183,26 +167,6 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
           </select>
         </div>
 
-        {/* Hospital Selection */}
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">院選択:</label>
-          <div className="flex space-x-2">
-            {hospitalOptions.map(hospital => (
-              <button
-                key={hospital.id}
-                onClick={() => setSelectedHospital(hospital.id)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  selectedHospital === hospital.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Building2 className="inline w-4 h-4 mr-1" />
-                {hospital.name}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Debug Info */}
@@ -213,7 +177,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
           <p>• 日次会計データ数: {state.data.dailyAccounts?.length || 0}</p>
           <p>• クリニックデータ: {state.data.clinicData ? 'あり' : 'なし'}</p>
           <p>• 選択月: {selectedMonth || '未選択'}</p>
-          <p>• 選択院: {selectedHospital}</p>
+          <p>• 選択院: {state.selectedClinic}</p>
           <p>• 利用可能月: {availableMonths.join(', ')}</p>
         </div>
       </div>

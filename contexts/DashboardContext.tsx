@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, ReactNode } from 'react'
+import React, { createContext, useContext, useReducer, ReactNode, useMemo, useRef } from 'react'
 import { MedicalForceAPI, DataProcessor } from '@/lib/api'
 import { saveDashboardChunks, loadAllDashboardChunks } from '@/lib/indexedDb'
 
@@ -977,10 +977,194 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 }
 
 // Hook - Dashboard context hook
+const clinicLabelMap: Record<string, string> = {
+  yokohama: '横浜院',
+  koriyama: '郡山院',
+  mito: '水戸院',
+  omiya: '大宮院'
+}
+
+const clinicNameToIdMap: Record<string, string> = Object.fromEntries(
+  Object.entries(clinicLabelMap).map(([id, name]) => [name, id])
+)
+
+const getRecordDate = (record: any): Date | null => {
+  const rawDate =
+    record?.recordDate ||
+    record?.visitDate ||
+    record?.treatmentDate ||
+    record?.accountingDate
+
+  if (!rawDate) return null
+  const date = new Date(rawDate)
+  return isNaN(date.getTime()) ? null : date
+}
+
+const normalizeDateRange = (dateRange: { start: string; end: string }) => {
+  const start = dateRange?.start ? new Date(dateRange.start) : null
+  const end = dateRange?.end ? new Date(dateRange.end) : null
+  if (start) start.setHours(0, 0, 0, 0)
+  if (end) end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
+
+const isWithinRange = (date: Date | null, start: Date | null, end: Date | null) => {
+  if (!date) return false
+  if (start && date < start) return false
+  if (end && date > end) return false
+  return true
+}
+
+const filterDailyAccountsBySelection = (
+  records: any[] = [],
+  selectedClinic: string,
+  dateRange: { start: string; end: string }
+) => {
+  if (!records.length) return []
+  const { start, end } = normalizeDateRange(dateRange)
+
+  return records.filter(record => {
+    const clinicId = record.clinicId || clinicNameToIdMap[record.clinicName || '']
+    if (selectedClinic !== 'all' && clinicId !== selectedClinic) return false
+    const recordDate = getRecordDate(record)
+    return isWithinRange(recordDate, start, end)
+  })
+}
+
+const buildCombinedData = (
+  records: any[],
+  clinicId: string,
+  dateRange?: { start: string; end: string }
+) => {
+  const total = records.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
+  const netTotal = records.reduce((sum, record) => sum + (record.netTotalWithTax || record.totalWithTax || 0), 0)
+
+  return {
+    clinicId,
+    clinicName: clinicLabelMap[clinicId] || (clinicId === 'all' ? '全院' : clinicId),
+    values: records,
+    total,
+    netTotal,
+    startAt: dateRange?.start,
+    endAt: dateRange?.end
+  }
+}
+
+const buildClinicDataFromRecords = (
+  template: DashboardState['data']['clinicData'],
+  records: any[],
+  dataProcessor: DataProcessor,
+  dateRange: { start: string; end: string }
+) => {
+  if (!template) return template
+
+  const grouped: Record<string, any[]> = {}
+  Object.keys(template).forEach(key => {
+    grouped[key] = []
+  })
+
+  records.forEach(record => {
+    const clinicId =
+      record.clinicId ||
+      clinicNameToIdMap[record.clinicName || ''] ||
+      record.clinic ||
+      record.clinicCode ||
+      'unknown'
+    if (!grouped[clinicId]) {
+      grouped[clinicId] = []
+    }
+    grouped[clinicId].push(record)
+  })
+
+  const result: DashboardState['data']['clinicData'] = {} as any
+
+  Object.entries(template).forEach(([key, clinicData]) => {
+    const clinicRecords = grouped[key] || []
+    const combined = buildCombinedData(clinicRecords, key, dateRange)
+    result[key as keyof DashboardState['data']['clinicData']] = {
+      ...clinicData,
+      dailyAccounts: clinicRecords,
+      patients: clinicRecords.length ? dataProcessor.processDailyAccountsToPatients(combined) : [],
+      accounting: clinicRecords.length ? dataProcessor.processDailyAccountsToAccounting(combined) : []
+    }
+  })
+
+  return result
+}
+
 export function useDashboard() {
   const context = useContext(DashboardContext)
   if (!context) {
     throw new Error('useDashboard must be used within a DashboardProvider')
   }
-  return context
+
+  const { state, ...rest } = context
+
+  const dataProcessorRef = useRef<DataProcessor>()
+  if (!dataProcessorRef.current) {
+    dataProcessorRef.current = new DataProcessor()
+  }
+  const dataProcessor = dataProcessorRef.current
+
+  const filteredState = useMemo(() => {
+    const filteredDailyAccounts = filterDailyAccountsBySelection(
+      state.data.dailyAccounts,
+      state.selectedClinic,
+      state.dateRange
+    )
+
+    const combinedData = buildCombinedData(filteredDailyAccounts, state.selectedClinic, state.dateRange)
+
+    const patients = filteredDailyAccounts.length
+      ? dataProcessor.processDailyAccountsToPatients(combinedData)
+      : []
+    const accounting = filteredDailyAccounts.length
+      ? dataProcessor.processDailyAccountsToAccounting(combinedData)
+      : []
+    const clinicData = buildClinicDataFromRecords(
+      state.data.clinicData,
+      filteredDailyAccounts,
+      dataProcessor,
+      state.dateRange
+    )
+
+    const currentMonthMetrics = filteredDailyAccounts.length
+      ? {
+          visitCount: dataProcessor.calculateCurrentMonthVisitCount(combinedData),
+          accountingUnitPrice: dataProcessor.calculateCurrentMonthAccountingUnitPrice(combinedData),
+          revenue: dataProcessor.calculateCurrentMonthRevenue(combinedData)
+        }
+      : state.currentMonthMetrics
+
+    const trendData = filteredDailyAccounts.length
+      ? {
+          monthly: dataProcessor.calculateMonthlyTrends(combinedData),
+          daily: dataProcessor.calculateDailyTrends(combinedData, 30),
+          yearOverYear: dataProcessor.calculateYearOverYearComparison(combinedData)
+        }
+      : state.trendData
+
+    const demographics = filteredDailyAccounts.length
+      ? dataProcessor.calculateDemographics(combinedData)
+      : state.demographics
+
+    return {
+      ...state,
+      data: {
+        ...state.data,
+        dailyAccounts: filteredDailyAccounts,
+        patients,
+        accounting,
+        clinicData
+      },
+      currentMonthMetrics,
+      trendData,
+      demographics
+    }
+  }, [state, dataProcessor])
+
+  return {
+    ...rest,
+    state: filteredState
+  }
 }

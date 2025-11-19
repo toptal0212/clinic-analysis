@@ -11,8 +11,7 @@ import {
   DollarSign, 
   Calendar,
   ChevronDown,
-  ChevronRight,
-  Building2
+  ChevronRight
 } from 'lucide-react'
 
 interface SummaryData {
@@ -46,7 +45,6 @@ interface SummaryData {
 export default function SummaryAnalysis() {
   const { state } = useDashboard()
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['美容']))
-  const [selectedHospital, setSelectedHospital] = useState<string>('all')
   const calculationEngine = new CalculationEngine()
 
   const summaryData = useMemo(() => {
@@ -96,12 +94,7 @@ export default function SummaryAnalysis() {
       }
     }
 
-    // Get data based on hospital selection
-    let baseData = state.data.dailyAccounts
-    if (selectedHospital !== 'all' && state.data.clinicData) {
-      const clinicKey = selectedHospital as keyof typeof state.data.clinicData
-      baseData = state.data.clinicData[clinicKey]?.dailyAccounts || []
-    }
+    const baseData = state.data.dailyAccounts
 
     // Filter to today's data only
     const today = new Date()
@@ -262,7 +255,7 @@ export default function SummaryAnalysis() {
       referralSourceSummary,
       treatmentSummary
     }
-  }, [state.data.dailyAccounts, state.data.clinicData, state.apiConnected, selectedHospital])
+  }, [state.data.dailyAccounts, state.data.clinicData, state.apiConnected])
 
   const toggleCategory = (category: string) => {
     const newExpanded = new Set(expandedCategories)
@@ -287,43 +280,14 @@ export default function SummaryAnalysis() {
     return new Intl.NumberFormat('ja-JP').format(num)
   }
 
-  const hospitalOptions = [
-    { id: 'all', name: '全院' },
-    { id: 'yokohama', name: '横浜院' },
-    { id: 'koriyama', name: '郡山院' },
-    { id: 'mito', name: '水戸院' },
-    { id: 'omiya', name: '大宮院' }
-  ]
-
   if (!summaryData) {
     return (
       <div className="space-y-6">
         {/* Header with Hospital Selection */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">サマリー分析</h2>
-              <p className="text-gray-600">本日の売上・来院数サマリー</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <label className="text-sm font-medium text-gray-700">院選択:</label>
-              <div className="flex space-x-2">
-                {hospitalOptions.map(hospital => (
-                  <button
-                    key={hospital.id}
-                    onClick={() => setSelectedHospital(hospital.id)}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      selectedHospital === hospital.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4 inline mr-1" />
-                    {hospital.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">サマリー分析</h2>
+            <p className="text-gray-600">本日の売上・来院数サマリー</p>
           </div>
         </div>
 
@@ -358,30 +322,9 @@ export default function SummaryAnalysis() {
 
       {/* Header with Hospital Selection */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">サマリー分析</h2>
-            <p className="text-gray-600">本日の売上・来院数サマリー</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">院選択:</label>
-            <div className="flex space-x-2">
-              {hospitalOptions.map(hospital => (
-                <button
-                  key={hospital.id}
-                  onClick={() => setSelectedHospital(hospital.id)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    selectedHospital === hospital.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <Building2 className="w-4 h-4 inline mr-1" />
-                  {hospital.name}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">サマリー分析</h2>
+          <p className="text-gray-600">本日の売上・来院数サマリー</p>
         </div>
       </div>
 

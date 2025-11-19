@@ -9,8 +9,7 @@ import {
   Package,
   TrendingUp,
   Users,
-  DollarSign,
-  Building2
+  DollarSign
 } from 'lucide-react'
 
 interface TreatmentHierarchyAnalysisProps {
@@ -19,7 +18,6 @@ interface TreatmentHierarchyAnalysisProps {
 
 export default function TreatmentHierarchyAnalysis({ dateRange }: TreatmentHierarchyAnalysisProps) {
   const { state } = useDashboard()
-  const [selectedHospital, setSelectedHospital] = useState<string>('all')
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -102,12 +100,7 @@ export default function TreatmentHierarchyAnalysis({ dateRange }: TreatmentHiera
       }
     }
 
-    // Get data based on hospital selection
-    let dailyAccounts = state.data.dailyAccounts
-    if (selectedHospital !== 'all' && state.data.clinicData) {
-      const clinicKey = selectedHospital as keyof typeof state.data.clinicData
-      dailyAccounts = state.data.clinicData[clinicKey]?.dailyAccounts || []
-    }
+    const dailyAccounts = state.data.dailyAccounts
 
     const hierarchy = {
       surgery: {
@@ -263,14 +256,6 @@ export default function TreatmentHierarchyAnalysis({ dateRange }: TreatmentHiera
     )
   }
 
-  const hospitalOptions = [
-    { id: 'all', name: '全院' },
-    { id: 'yokohama', name: '横浜院' },
-    { id: 'koriyama', name: '郡山院' },
-    { id: 'mito', name: '水戸院' },
-    { id: 'omiya', name: '大宮院' }
-  ]
-
   return (
     <div className="space-y-6">
       {/* Sample Data Notice */}
@@ -282,32 +267,10 @@ export default function TreatmentHierarchyAnalysis({ dateRange }: TreatmentHiera
         </div>
       )}
 
-      {/* Header with Hospital Selection */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">施術階層分析</h2>
-            <p className="text-gray-600">治療カテゴリー別の売上・件数分析</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">院選択:</label>
-            <div className="flex space-x-2">
-              {hospitalOptions.map(hospital => (
-                <button
-                  key={hospital.id}
-                  onClick={() => setSelectedHospital(hospital.id)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    selectedHospital === hospital.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <Building2 className="w-4 h-4 inline mr-1" />
-                  {hospital.name}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">施術階層分析</h2>
+          <p className="text-gray-600">治療カテゴリー別の売上・件数分析</p>
         </div>
       </div>
 

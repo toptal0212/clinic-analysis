@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
@@ -11,14 +11,53 @@ function useAllAccounts() {
   const { state } = useDashboard()
   return useMemo(() => {
     const all: any[] = []
-    if (state.data.dailyAccounts?.length) all.push(...state.data.dailyAccounts)
-    if (state.data.clinicData) {
-      Object.values(state.data.clinicData).forEach((c: any) => {
-        if (c?.dailyAccounts?.length) all.push(...c.dailyAccounts)
+    
+    // The state.data.dailyAccounts is already filtered by selectedClinic and dateRange
+    // via the useDashboard hook's filteredState
+    if (state.data?.dailyAccounts && Array.isArray(state.data.dailyAccounts)) {
+      all.push(...state.data.dailyAccounts)
+    }
+    
+    // Also check clinicData which is also filtered
+    if (state.data?.clinicData) {
+      Object.values(state.data.clinicData).forEach((clinic: any) => {
+        if (clinic?.dailyAccounts && Array.isArray(clinic.dailyAccounts)) {
+          // Avoid duplicates - only add if not already in all
+          clinic.dailyAccounts.forEach((record: any) => {
+            const exists = all.some(r => 
+              r.recordDate === record.recordDate && 
+              r.visitorId === record.visitorId &&
+              r.visitorKarteNumber === record.visitorKarteNumber
+            )
+            if (!exists) {
+              all.push(record)
+            }
+          })
+        }
       })
     }
+
+    console.log('📊 [Cancellation] useAllAccounts:', {
+      selectedClinic: state.selectedClinic,
+      dateRange: state.dateRange,
+      dailyAccountsCount: state.data?.dailyAccounts?.length || 0,
+      clinicDataCount: state.data?.clinicData ? 
+        Object.values(state.data.clinicData).reduce((sum: number, c: any) => 
+          sum + (c?.dailyAccounts?.length || 0), 0) : 0,
+      totalAfterMerge: all.length,
+      sampleRecord: all[0] ? {
+        recordDate: all[0].recordDate,
+        visitorName: all[0].visitorName,
+        cancelPriceWithTax: all[0].cancelPriceWithTax,
+        refundPriceWithTax: all[0].refundPriceWithTax,
+        coolingoffPriceWithTax: all[0].coolingoffPriceWithTax,
+        totalWithTax: all[0].totalWithTax,
+        hasCancelFields: !!(all[0].cancelPriceWithTax || all[0].refundPriceWithTax || all[0].coolingoffPriceWithTax)
+      } : null
+    })
+
     return all
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [state.data.dailyAccounts, state.data.clinicData, state.selectedClinic, state.dateRange])
 }
 
 function toYmd(d: any) {
@@ -28,7 +67,39 @@ function toYmd(d: any) {
 }
 
 export default function Cancellation() {
+  const { state } = useDashboard()
   const all = useAllAccounts()
+
+  // Debug: Check cancellation data availability
+  useEffect(() => {
+    if (all.length > 0) {
+      const cancelRecords = all.filter((r: any) => {
+        const cancelAmount = (r.cancelPriceWithTax || 0) + (r.refundPriceWithTax || 0) + (r.coolingoffPriceWithTax || 0)
+        return cancelAmount > 0
+      })
+      
+      console.log('📊 [Cancellation] Cancellation data analysis:', {
+        totalRecords: all.length,
+        recordsWithCancellation: cancelRecords.length,
+        selectedClinic: state.selectedClinic,
+        dateRange: state.dateRange,
+        apiConnected: state.apiConnected,
+        sampleCancelRecord: cancelRecords[0] || null,
+        sampleRegularRecord: all.find((r: any) => {
+          const cancelAmount = (r.cancelPriceWithTax || 0) + (r.refundPriceWithTax || 0) + (r.coolingoffPriceWithTax || 0)
+          return cancelAmount === 0
+        }) || null
+      })
+    } else {
+      console.log('📊 [Cancellation] No data available:', {
+        selectedClinic: state.selectedClinic,
+        dateRange: state.dateRange,
+        apiConnected: state.apiConnected,
+        dailyAccountsCount: state.data?.dailyAccounts?.length || 0,
+        clinicDataExists: !!state.data?.clinicData
+      })
+    }
+  }, [all, state.selectedClinic, state.dateRange, state.apiConnected])
 
   // Monthly aggregates
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -161,14 +232,60 @@ export default function Cancellation() {
     })
   }, [all])
 
+
   // Show empty state if no cancellation data
   if (!hasCancellationData) {
+    const totalRecords = all.length
+    const hasDataButNoCancel = totalRecords > 0
+    const sampleRecord = all[0]
+    
     return (
       <div className="p-6 space-y-6">
         <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
-          <p className="text-sm text-gray-600">
-            📊 予約キャンセルのデータがありません。
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            📊 予約キャンセルのデータがありません
           </p>
+          {hasDataButNoCancel ? (
+            <div className="mt-2 space-y-2 text-xs text-gray-600">
+              <p>• データレコード数: {totalRecords}件</p>
+              <p>• 選択中の院: {state.selectedClinic === 'all' ? '全院' : state.selectedClinic}</p>
+              <p>• 選択中の期間: {state.dateRange?.start} ～ {state.dateRange?.end}</p>
+              <p>• キャンセル関連の金額フィールド（cancelPriceWithTax, refundPriceWithTax, coolingoffPriceWithTax）に値がありません</p>
+              <div className="mt-3 p-2 bg-white rounded border">
+                <p className="font-medium mb-1">サンプルレコードの構造:</p>
+                <pre className="text-xs overflow-auto">
+                  {JSON.stringify({
+                    recordDate: sampleRecord?.recordDate,
+                    visitorName: sampleRecord?.visitorName,
+                    cancelPriceWithTax: sampleRecord?.cancelPriceWithTax,
+                    refundPriceWithTax: sampleRecord?.refundPriceWithTax,
+                    coolingoffPriceWithTax: sampleRecord?.coolingoffPriceWithTax,
+                    totalWithTax: sampleRecord?.totalWithTax,
+                    hasCancelFields: !!(sampleRecord?.cancelPriceWithTax || sampleRecord?.refundPriceWithTax || sampleRecord?.coolingoffPriceWithTax)
+                  }, null, 2)}
+                </pre>
+              </div>
+              <p className="mt-2 text-yellow-700">
+                💡 ヒント: 期間を広げるか、「全院」を選択してデータを確認してください
+              </p>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2 text-xs text-gray-600">
+              <p>• データが読み込まれていません</p>
+              <p>• API接続状態: {state.apiConnected ? '✅ 接続済み' : '❌ 未接続'}</p>
+              {!state.apiConnected && (
+                <p>• APIに接続するか、CSVファイルをインポートしてください</p>
+              )}
+              {state.apiConnected && (
+                <div className="mt-2 space-y-1">
+                  <p>• フィルター条件を確認してください:</p>
+                  <p>  - 院選択: {state.selectedClinic === 'all' ? '全院' : state.selectedClinic}</p>
+                  <p>  - 期間: {state.dateRange?.start || '未設定'} ～ {state.dateRange?.end || '未設定'}</p>
+                  <p>• ヘッダーの「フィルター適用」ボタンをクリックしてデータを更新してください</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     )

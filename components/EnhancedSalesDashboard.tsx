@@ -4,7 +4,6 @@ import React, { useState, useMemo } from 'react'
 import { 
   TrendingUp, 
   Users, 
-  Building2, 
   AlertTriangle, 
   CheckCircle, 
   BarChart3,
@@ -12,8 +11,10 @@ import {
   Target,
   Filter,
   Eye,
-  EyeOff
+  EyeOff,
+  Building
 } from 'lucide-react'
+import { useDashboard } from '@/contexts/DashboardContext'
 
 interface SalesData {
   clinic: string
@@ -79,11 +80,19 @@ interface GoalData {
 }
 
 export default function EnhancedSalesDashboard() {
+  const { state } = useDashboard()
   const [selectedTab, setSelectedTab] = useState<'overview' | 'clinic-breakdown' | 'category-drilldown'>('overview')
-  const [selectedClinic, setSelectedClinic] = useState<string>('all')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [showAlerts, setShowAlerts] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const clinicNameMap: Record<string, string> = {
+    yokohama: '横浜院',
+    koriyama: '郡山院',
+    mito: '水戸院',
+    omiya: '大宮院'
+  }
+  const selectedClinicId = state.selectedClinic || 'all'
+  const selectedClinicName = clinicNameMap[selectedClinicId] || (selectedClinicId === 'all' ? 'all' : selectedClinicId)
 
   // Mock data - replace with real data from your API
   const salesData: SalesData[] = [
@@ -218,15 +227,15 @@ export default function EnhancedSalesDashboard() {
   }
 
   const filteredData = useMemo(() => {
-    if (selectedClinic === 'all') return salesData
-    return salesData.filter(data => data.clinic === selectedClinic)
-  }, [selectedClinic, salesData])
+    if (selectedClinicId === 'all') return salesData
+    return salesData.filter(data => data.clinic === selectedClinicName)
+  }, [selectedClinicId, selectedClinicName, salesData])
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="min-h-screen p-6 bg-gray-50">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">売上分析ダッシュボード</h1>
+        <h1 className="mb-2 text-2xl font-bold text-gray-900">売上分析ダッシュボード</h1>
         <p className="text-gray-600">詳細な売上分析とデータ品質管理</p>
       </div>
 
@@ -259,11 +268,11 @@ export default function EnhancedSalesDashboard() {
                   </div>
                 </div>
                 {alert.details.length > 0 && (
-                  <div className="mt-3 pl-8">
-                    <p className="text-sm font-medium mb-1">該当患者:</p>
+                  <div className="pl-8 mt-3">
+                    <p className="mb-1 text-sm font-medium">該当患者:</p>
                     <div className="flex flex-wrap gap-2">
                       {alert.details.map((detail, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-white bg-opacity-50 rounded text-xs">
+                        <span key={idx} className="px-2 py-1 text-xs bg-white bg-opacity-50 rounded">
                           {detail}
                         </span>
                       ))}
@@ -299,7 +308,7 @@ export default function EnhancedSalesDashboard() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Building2 className="inline w-4 h-4 mr-1" />
+              <Building className="inline w-4 h-4 mr-1" />
               院別売上
             </button>
             <button
@@ -321,10 +330,10 @@ export default function EnhancedSalesDashboard() {
       {selectedTab === 'overview' && (
         <div className="space-y-6">
           {/* Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-white rounded-lg shadow-sm border">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="p-4 bg-white border rounded-lg shadow-sm">
               <div className="flex items-center">
-                <TrendingUp className="w-8 h-8 text-blue-600 mr-3" />
+                <TrendingUp className="w-8 h-8 mr-3 text-blue-600" />
                 <div>
                   <p className="text-sm text-blue-600">総売上</p>
                   <p className="text-xl font-semibold text-blue-900">
@@ -334,9 +343,9 @@ export default function EnhancedSalesDashboard() {
               </div>
             </div>
 
-            <div className="p-4 bg-white rounded-lg shadow-sm border">
+            <div className="p-4 bg-white border rounded-lg shadow-sm">
               <div className="flex items-center">
-                <Users className="w-8 h-8 text-green-600 mr-3" />
+                <Users className="w-8 h-8 mr-3 text-green-600" />
                 <div>
                   <p className="text-sm text-green-600">総来院数</p>
                   <p className="text-xl font-semibold text-green-900">
@@ -346,9 +355,9 @@ export default function EnhancedSalesDashboard() {
               </div>
             </div>
 
-            <div className="p-4 bg-white rounded-lg shadow-sm border">
+            <div className="p-4 bg-white border rounded-lg shadow-sm">
               <div className="flex items-center">
-                <BarChart3 className="w-8 h-8 text-purple-600 mr-3" />
+                <BarChart3 className="w-8 h-8 mr-3 text-purple-600" />
                 <div>
                   <p className="text-sm text-purple-600">平均単価</p>
                   <p className="text-xl font-semibold text-purple-900">
@@ -360,9 +369,9 @@ export default function EnhancedSalesDashboard() {
               </div>
             </div>
 
-            <div className="p-4 bg-white rounded-lg shadow-sm border">
+            <div className="p-4 bg-white border rounded-lg shadow-sm">
               <div className="flex items-center">
-                <Target className="w-8 h-8 text-orange-600 mr-3" />
+                <Target className="w-8 h-8 mr-3 text-orange-600" />
                 <div>
                   <p className="text-sm text-orange-600">目標達成率</p>
                   <p className="text-xl font-semibold text-orange-900">
@@ -374,9 +383,9 @@ export default function EnhancedSalesDashboard() {
           </div>
 
           {/* Category Breakdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="p-6 bg-white rounded-lg shadow-sm border">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">売上構成比</h3>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="p-6 bg-white border rounded-lg shadow-sm">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">売上構成比</h3>
               <div className="space-y-4">
                 {['surgery', 'dermatology', 'hairRemoval', 'other'].map((category) => {
                   const categoryData = filteredData.reduce((sum, data) => {
@@ -398,7 +407,7 @@ export default function EnhancedSalesDashboard() {
                           {formatCurrency(categoryData)} ({percentage.toFixed(1)}%)
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div className="w-full h-3 bg-gray-200 rounded-full">
                         <div 
                           className={`h-3 rounded-full ${
                             category === 'surgery' ? 'bg-red-500' :
@@ -414,11 +423,11 @@ export default function EnhancedSalesDashboard() {
               </div>
             </div>
 
-            <div className="p-6 bg-white rounded-lg shadow-sm border">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">院別目標達成状況</h3>
+            <div className="p-6 bg-white border rounded-lg shadow-sm">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">院別目標達成状況</h3>
               <div className="space-y-4">
                 {goals.map((goal, index) => (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                  <div key={index} className="p-4 rounded-lg bg-gray-50">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-gray-900">{goal.clinic}</span>
                       <span className={`text-sm font-medium ${
@@ -428,7 +437,7 @@ export default function EnhancedSalesDashboard() {
                         {goal.achievementRate.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full h-2 bg-gray-200 rounded-full">
                       <div 
                         className={`h-2 rounded-full ${
                           goal.achievementRate >= 100 ? 'bg-green-500' :
@@ -450,32 +459,16 @@ export default function EnhancedSalesDashboard() {
 
       {selectedTab === 'clinic-breakdown' && (
         <div className="space-y-6">
-          {/* Clinic Filter */}
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">院選択:</label>
-            <select
-              value={selectedClinic}
-              onChange={(e) => setSelectedClinic(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">全院</option>
-              <option value="横浜院">横浜院</option>
-              <option value="郡山院">郡山院</option>
-              <option value="水戸院">水戸院</option>
-              <option value="大宮院">大宮院</option>
-            </select>
-          </div>
-
           {/* Clinic Data Table */}
-          <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          <div className="overflow-hidden bg-white border rounded-lg shadow-sm">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">院名</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">売上</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">来院数</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">平均単価</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">目標達成率</th>
+                  <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">院名</th>
+                  <th className="px-6 py-3 text-xs font-medium text-center text-gray-500 uppercase">売上</th>
+                  <th className="px-6 py-3 text-xs font-medium text-center text-gray-500 uppercase">来院数</th>
+                  <th className="px-6 py-3 text-xs font-medium text-center text-gray-500 uppercase">平均単価</th>
+                  <th className="px-6 py-3 text-xs font-medium text-center text-gray-500 uppercase">目標達成率</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -535,10 +528,10 @@ export default function EnhancedSalesDashboard() {
           {/* Drill-down Categories */}
           <div className="space-y-4">
             {/* Surgery Category */}
-            <div className="bg-white rounded-lg shadow-sm border">
+            <div className="bg-white border rounded-lg shadow-sm">
               <button
                 onClick={() => toggleCategoryExpansion('surgery')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50"
+                className="flex items-center justify-between w-full p-4 text-left hover:bg-gray-50"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-3 h-3 bg-red-500 rounded"></div>
@@ -555,8 +548,8 @@ export default function EnhancedSalesDashboard() {
               </button>
               
               {expandedCategories.has('surgery') && (
-                <div className="border-t border-gray-200 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 border-t border-gray-200">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {[
                       { key: 'doubleEyelid', label: '二重', value: 'doubleEyelid' },
                       { key: 'darkCircle', label: 'くま治療', value: 'darkCircle' },
@@ -571,7 +564,7 @@ export default function EnhancedSalesDashboard() {
                         sum + data.categories.surgery.procedures[procedure.value as keyof typeof data.categories.surgery.procedures], 0
                       )
                       return (
-                        <div key={procedure.key} className="p-3 bg-gray-50 rounded-lg">
+                        <div key={procedure.key} className="p-3 rounded-lg bg-gray-50">
                           <div className="text-sm font-medium text-gray-900">{procedure.label}</div>
                           <div className="text-lg font-semibold text-gray-900">{formatCurrency(total)}</div>
                         </div>
@@ -583,10 +576,10 @@ export default function EnhancedSalesDashboard() {
             </div>
 
             {/* Dermatology Category */}
-            <div className="bg-white rounded-lg shadow-sm border">
+            <div className="bg-white border rounded-lg shadow-sm">
               <button
                 onClick={() => toggleCategoryExpansion('dermatology')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50"
+                className="flex items-center justify-between w-full p-4 text-left hover:bg-gray-50"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-3 h-3 bg-blue-500 rounded"></div>
@@ -603,8 +596,8 @@ export default function EnhancedSalesDashboard() {
               </button>
               
               {expandedCategories.has('dermatology') && (
-                <div className="border-t border-gray-200 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 border-t border-gray-200">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {[
                       { key: 'injection', label: '注入', value: 'injection' },
                       { key: 'skin', label: 'スキン', value: 'skin' }
@@ -613,7 +606,7 @@ export default function EnhancedSalesDashboard() {
                         sum + data.categories.dermatology.procedures[procedure.value as keyof typeof data.categories.dermatology.procedures], 0
                       )
                       return (
-                        <div key={procedure.key} className="p-3 bg-gray-50 rounded-lg">
+                        <div key={procedure.key} className="p-3 rounded-lg bg-gray-50">
                           <div className="text-sm font-medium text-gray-900">{procedure.label}</div>
                           <div className="text-lg font-semibold text-gray-900">{formatCurrency(total)}</div>
                         </div>
@@ -625,10 +618,10 @@ export default function EnhancedSalesDashboard() {
             </div>
 
             {/* Hair Removal Category */}
-            <div className="bg-white rounded-lg shadow-sm border">
+            <div className="bg-white border rounded-lg shadow-sm">
               <button
                 onClick={() => toggleCategoryExpansion('hairRemoval')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50"
+                className="flex items-center justify-between w-full p-4 text-left hover:bg-gray-50"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-3 h-3 bg-green-500 rounded"></div>
@@ -646,10 +639,10 @@ export default function EnhancedSalesDashboard() {
             </div>
 
             {/* Other Category */}
-            <div className="bg-white rounded-lg shadow-sm border">
+            <div className="bg-white border rounded-lg shadow-sm">
               <button
                 onClick={() => toggleCategoryExpansion('other')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50"
+                className="flex items-center justify-between w-full p-4 text-left hover:bg-gray-50"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-3 h-3 bg-purple-500 rounded"></div>
@@ -666,8 +659,8 @@ export default function EnhancedSalesDashboard() {
               </button>
               
               {expandedCategories.has('other') && (
-                <div className="border-t border-gray-200 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 border-t border-gray-200">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     {[
                       { key: 'piercing', label: 'ピアス', value: 'piercing' },
                       { key: 'products', label: '物販', value: 'products' },
@@ -677,7 +670,7 @@ export default function EnhancedSalesDashboard() {
                         sum + data.categories.other.procedures[procedure.value as keyof typeof data.categories.other.procedures], 0
                       )
                       return (
-                        <div key={procedure.key} className="p-3 bg-gray-50 rounded-lg">
+                        <div key={procedure.key} className="p-3 rounded-lg bg-gray-50">
                           <div className="text-sm font-medium text-gray-900">{procedure.label}</div>
                           <div className="text-lg font-semibold text-gray-900">{formatCurrency(total)}</div>
                         </div>

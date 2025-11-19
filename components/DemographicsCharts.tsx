@@ -4,7 +4,6 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { Building2 } from 'lucide-react'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -83,37 +82,8 @@ function DemographicsChart({ title, data, hospitalId }: DemographicsChartProps &
 
 export default function DemographicsCharts() {
   const { state } = useDashboard()
-  const [selectedHospital, setSelectedHospital] = useState<string>('all')
-  const [chartVersion, setChartVersion] = useState<number>(0)
   const [clientTimestamp, setClientTimestamp] = useState<string>('')
-
-  const hospitalOptions = [
-    { id: 'all', name: '全院' },
-    { id: 'yokohama', name: '横浜院' },
-    { id: 'koriyama', name: '郡山院' },
-    { id: 'mito', name: '水戸院' },
-    { id: 'omiya', name: '大宮院' }
-  ]
-
-  // Force chart update when hospital changes
-  const handleHospitalChange = useCallback((hospitalId: string) => {
-    const hospitalName = (['all','yokohama','koriyama','mito','omiya'] as const)
-      .map(id => hospitalOptions.find(h => h.id === id))
-      .find(h => h?.id === hospitalId)?.name || hospitalId
-
-    // Determine target data count at click time
-    let dailyCount = 0
-    if (hospitalId === 'all') {
-      dailyCount = state.data.dailyAccounts?.length || 0
-    } else {
-      const clinic = state.data.clinicData?.[hospitalId as keyof typeof state.data.clinicData]
-      dailyCount = clinic?.dailyAccounts?.length || 0
-    }
-
-    console.log('🖱️ [DemographicsCharts] 院選択 クリック:', { id: hospitalId, name: hospitalName, dailyAccountsCount: dailyCount })
-    setSelectedHospital(hospitalId)
-    setChartVersion(prev => prev + 1)
-  }, [hospitalOptions, state.data.clinicData, state.data.dailyAccounts])
+  const selectedHospital = state.selectedClinic || 'all'
 
   // Build demographics from real data
   const buildDemographicsFromData = useCallback((hospitalId: string) => {
@@ -296,7 +266,7 @@ export default function DemographicsCharts() {
         data: createChartData(d.visitType, colorPalettes.visitType)
       },
     ]
-  }, [selectedHospital, chartVersion, buildDemographicsFromData])
+  }, [selectedHospital, buildDemographicsFromData])
 
   // Set timestamp only on client side to avoid hydration mismatch
   useEffect(() => {
@@ -314,38 +284,11 @@ export default function DemographicsCharts() {
 
   return (
     <div className="space-y-6">
-      {/* Hospital Selection */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Building2 className="w-5 h-5 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">院選択:</span>
-          </div>
-        <div className="flex space-x-2">
-          {hospitalOptions.map((hospital) => (
-            <button
-              key={hospital.id}
-              onClick={() => handleHospitalChange(hospital.id)}
-              className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                selectedHospital === hospital.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {hospital.name}
-            </button>
-          ))}
+      {clientTimestamp && (
+        <div className="text-right text-xs text-gray-500">
+          最終更新: {clientTimestamp}
         </div>
-        <div className="text-xs text-gray-500">
-          選択中: {hospitalOptions.find(h => h.id === selectedHospital)?.name}
-        </div>
-        </div>
-        {clientTimestamp && (
-          <div className="text-xs text-gray-500">
-            最終更新: {clientTimestamp}
-          </div>
-        )}
-      </div>
+      )}
 
 
       {/* Charts */}
@@ -353,7 +296,7 @@ export default function DemographicsCharts() {
         {chartsData.length > 0 ? (
           chartsData.map((chart, index) => (
             <DemographicsChart 
-              key={`${selectedHospital}-${chartVersion}-${index}`} 
+              key={`${selectedHospital}-${index}`} 
               {...chart} 
               hospitalId={selectedHospital}
             />

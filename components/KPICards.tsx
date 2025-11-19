@@ -1,8 +1,8 @@
 'use client'
 
-import { Users, DollarSign, Target, Building2 } from 'lucide-react'
+import { Users, DollarSign, Target } from 'lucide-react'
 import { useDashboard } from '@/contexts/DashboardContext'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 interface KPICardProps {
   title: string
@@ -40,15 +40,6 @@ function KPICard({ title, value, forecast, icon: Icon }: KPICardProps) {
 
 export default function KPICards() {
   const { state } = useDashboard()
-  const [selectedHospital, setSelectedHospital] = useState<string>('all')
-
-  const hospitalOptions = [
-    { id: 'all', name: '全院' },
-    { id: 'yokohama', name: '横浜院' },
-    { id: 'koriyama', name: '郡山院' },
-    { id: 'mito', name: '水戸院' },
-    { id: 'omiya', name: '大宮院' }
-  ]
 
   const kpiData = useMemo(() => {
     if (!state.apiConnected || !state.data.clinicData) {
@@ -72,16 +63,7 @@ export default function KPICards() {
       ]
     }
 
-    // Calculate metrics based on selected hospital
-    let dailyAccounts = []
-    if (selectedHospital === 'all') {
-      // Use combined data
-      dailyAccounts = state.data.dailyAccounts || []
-    } else {
-      // Use specific hospital data
-      const clinicData = state.data.clinicData[selectedHospital as keyof typeof state.data.clinicData]
-      dailyAccounts = clinicData?.dailyAccounts || []
-    }
+    const dailyAccounts = state.data.dailyAccounts || []
 
     // Calculate current month metrics
     const currentDate = new Date()
@@ -114,34 +96,10 @@ export default function KPICards() {
         icon: Target
       }
     ]
-  }, [state.apiConnected, state.data.clinicData, state.data.dailyAccounts, selectedHospital])
+  }, [state.apiConnected, state.data.clinicData, state.data.dailyAccounts])
 
   return (
     <div className="space-y-6">
-      {/* Hospital Selection */}
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <Building2 className="w-5 h-5 text-gray-600" />
-          <span className="text-sm font-medium text-gray-700">院選択:</span>
-        </div>
-        <div className="flex space-x-2">
-          {hospitalOptions.map((hospital) => (
-            <button
-              key={hospital.id}
-              onClick={() => setSelectedHospital(hospital.id)}
-              className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                selectedHospital === hospital.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {hospital.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {kpiData.map((kpi, index) => (
           <KPICard key={index} {...kpi} />

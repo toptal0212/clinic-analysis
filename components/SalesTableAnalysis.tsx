@@ -7,7 +7,6 @@ import {
   Users, 
   TrendingUp, 
   Calendar,
-  Building2,
   Table,
   Upload,
   Target,
@@ -31,7 +30,6 @@ interface SalesTableAnalysisProps {
 export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProps) {
   const { state } = useDashboard()
   const [selectedMonth, setSelectedMonth] = useState<string>('')
-  const [selectedHospital, setSelectedHospital] = useState<string>('all')
 
   // Extract unique staff names from data
   const availableStaff = useMemo(() => {
@@ -97,23 +95,14 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
     console.log('🔍 [SalesTableAnalysis] API Connected:', state.apiConnected)
     console.log('🔍 [SalesTableAnalysis] Daily Accounts Length:', state.data.dailyAccounts?.length)
     console.log('🔍 [SalesTableAnalysis] Selected Month:', selectedMonth)
-    console.log('🔍 [SalesTableAnalysis] Selected Hospital:', selectedHospital)
     
     if (!state.apiConnected || !state.data.dailyAccounts?.length || !selectedMonth) {
       console.log('🔍 [SalesTableAnalysis] Missing required data, returning null')
       return null
     }
 
-    // Get data based on hospital selection
-    let dailyAccounts = state.data.dailyAccounts
-    if (selectedHospital !== 'all' && state.data.clinicData) {
-      const clinicKey = selectedHospital as keyof typeof state.data.clinicData
-      dailyAccounts = state.data.clinicData[clinicKey]?.dailyAccounts || []
-      console.log('🔍 [SalesTableAnalysis] Using clinic data for:', selectedHospital, 'Count:', dailyAccounts.length)
-    } else {
-      console.log('🔍 [SalesTableAnalysis] Using all clinic data, Count:', dailyAccounts.length)
-    }
-
+    const dailyAccounts = state.data.dailyAccounts
+    console.log('🔍 [SalesTableAnalysis] Using filtered clinic data, Count:', dailyAccounts.length)
     // Filter data for selected month
     const targetMonthData = dailyAccounts.filter(record => {
       const visitDate = record.visitDate || record.recordDate || record.accountingDate
@@ -218,15 +207,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
 
     console.log('🔍 [SalesTableAnalysis] Calculated metrics:', metrics)
     return metrics
-  }, [state.apiConnected, state.data.dailyAccounts, state.data.clinicData, selectedMonth, selectedHospital])
-
-  const hospitalOptions = [
-    { id: 'all', name: '全院' },
-    { id: 'yokohama', name: '横浜院' },
-    { id: 'koriyama', name: '郡山院' },
-    { id: 'mito', name: '水戸院' },
-    { id: 'omiya', name: '大宮院' }
-  ]
+  }, [state.apiConnected, state.data.dailyAccounts, selectedMonth])
 
   if (!state.apiConnected) {
     return (
@@ -275,26 +256,6 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
               </select>
             </div>
 
-            {/* Hospital Selection */}
-            <div className="flex items-center space-x-4">
-              <label className="text-sm font-medium text-gray-700">院選択:</label>
-              <div className="flex space-x-2">
-                {hospitalOptions.map(hospital => (
-                  <button
-                    key={hospital.id}
-                    onClick={() => setSelectedHospital(hospital.id)}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      selectedHospital === hospital.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <Building2 className="inline w-4 h-4 mr-1" />
-                    {hospital.name}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
       {/* Debug Info */}
@@ -305,7 +266,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
           <p>• 日次会計データ数: {state.data.dailyAccounts?.length || 0}</p>
           <p>• クリニックデータ: {state.data.clinicData ? 'あり' : 'なし'}</p>
           <p>• 選択月: {selectedMonth || '未選択'}</p>
-          <p>• 選択院: {selectedHospital}</p>
+          <p>• 選択院: {state.selectedClinic}</p>
           <p>• 利用可能月: {availableMonths.join(', ')}</p>
           {state.data.dailyAccounts?.length > 0 && (
             <div className="p-2 mt-2 bg-yellow-100 rounded">

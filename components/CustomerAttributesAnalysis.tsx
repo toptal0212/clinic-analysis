@@ -12,23 +12,47 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 export default function CustomerAttributesAnalysis() {
   const { state } = useDashboard()
 
-  // Get all daily accounts data
+  // Get all daily accounts data (clinic & date range filtered)
   const getAllDailyAccounts = () => {
     const allData: any[] = []
-    
-    if (state.data?.dailyAccounts && Array.isArray(state.data.dailyAccounts)) {
-      allData.push(...state.data.dailyAccounts)
+
+    const { selectedClinic, dateRange, data } = state
+    const hasClinicData = data?.clinicData
+
+    if (selectedClinic && selectedClinic !== 'all' && hasClinicData && (hasClinicData as any)[selectedClinic]) {
+      // Specific clinic
+      const clinic = (hasClinicData as any)[selectedClinic]
+      if (clinic?.dailyAccounts && Array.isArray(clinic.dailyAccounts)) {
+        allData.push(...clinic.dailyAccounts)
+      }
+    } else {
+      // All clinics
+      if (data?.dailyAccounts && Array.isArray(data.dailyAccounts)) {
+        allData.push(...data.dailyAccounts)
+      }
+
+      if (hasClinicData) {
+        Object.values(hasClinicData).forEach((clinic: any) => {
+          if (clinic?.dailyAccounts && Array.isArray(clinic.dailyAccounts)) {
+            allData.push(...clinic.dailyAccounts)
+          }
+        })
+      }
     }
-    
-    if (state.data?.clinicData) {
-      Object.values(state.data.clinicData).forEach((clinic: any) => {
-        if (clinic?.dailyAccounts && Array.isArray(clinic.dailyAccounts)) {
-          allData.push(...clinic.dailyAccounts)
-        }
-      })
-    }
-    
-    return allData
+
+    // Date range filter
+    const start = dateRange?.start ? new Date(dateRange.start) : null
+    const end = dateRange?.end ? new Date(dateRange.end) : null
+    if (start) start.setHours(0, 0, 0, 0)
+    if (end) end.setHours(23, 59, 59, 999)
+
+    return allData.filter((record: any) => {
+      const date = parseDate(record)
+      if (!date) return false
+      if (start && date < start) return false
+      if (end && date > end) return false
+      return true
+    })
   }
 
   // Helper to parse date
@@ -118,7 +142,13 @@ export default function CustomerAttributesAnalysis() {
       labels: months.map(m => m.label),
       datasets
     }
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [
+    state.data.dailyAccounts,
+    state.data.clinicData,
+    state.selectedClinic,
+    state.dateRange.start,
+    state.dateRange.end
+  ])
 
   // Calculate visits trend (stacked bar + line)
   const visitsTrend = useMemo(() => {
@@ -187,7 +217,13 @@ export default function CustomerAttributesAnalysis() {
         }
       ]
     }
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [
+    state.data.dailyAccounts,
+    state.data.clinicData,
+    state.selectedClinic,
+    state.dateRange.start,
+    state.dateRange.end
+  ])
 
   // Calculate demographics for pie charts
   const demographics = useMemo(() => {
@@ -323,7 +359,13 @@ export default function CustomerAttributesAnalysis() {
     })
 
     return result
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [
+    state.data.dailyAccounts,
+    state.data.clinicData,
+    state.selectedClinic,
+    state.dateRange.start,
+    state.dateRange.end
+  ])
 
   // Calculate scatter plot data (visits vs sales by patient)
   const scatterData = useMemo(() => {
@@ -371,7 +413,13 @@ export default function CustomerAttributesAnalysis() {
         pointHoverRadius: 6
       }]
     }
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [
+    state.data.dailyAccounts,
+    state.data.clinicData,
+    state.selectedClinic,
+    state.dateRange.start,
+    state.dateRange.end
+  ])
 
   // Patient data table
   const patientTableData = useMemo(() => {
@@ -409,7 +457,13 @@ export default function CustomerAttributesAnalysis() {
       }))
       .sort((a, b) => b.sales - a.sales)
       .slice(0, 50)
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [
+    state.data.dailyAccounts,
+    state.data.clinicData,
+    state.selectedClinic,
+    state.dateRange.start,
+    state.dateRange.end
+  ])
 
   // Pagination states for tables
   const [patientPage, setPatientPage] = useState(1)
@@ -439,7 +493,13 @@ export default function CustomerAttributesAnalysis() {
         return dateB.getTime() - dateA.getTime()
       })
       .slice(0, 100)
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [
+    state.data.dailyAccounts,
+    state.data.clinicData,
+    state.selectedClinic,
+    state.dateRange.start,
+    state.dateRange.end
+  ])
 
   const hasRealData = getAllDailyAccounts().length > 0
 
