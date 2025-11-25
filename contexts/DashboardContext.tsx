@@ -467,6 +467,33 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval)
   }, [state.apiConnected, state.dataSource])
 
+  React.useEffect(() => {
+    if (!state.apiConnected || state.dataSource !== 'api') return
+
+    let isRunning = false
+
+    const runRefresh = async () => {
+      if (isRunning) return
+      isRunning = true
+      try {
+        await loadRecentDataFromApi()
+      } catch (error) {
+        console.error('❌ [Context] Scheduled recent data refresh failed:', error)
+      } finally {
+        isRunning = false
+      }
+    }
+
+    // Trigger initial refresh on mount for the latest data
+    runRefresh()
+
+    const interval = setInterval(() => {
+      runRefresh()
+    }, RECENT_REFRESH_INTERVAL)
+
+    return () => clearInterval(interval)
+  }, [state.apiConnected, state.dataSource])
+
 
   const connectToApi = async (config: ApiConfig) => {
     console.log('🔌 [Context] connectToApi start - Loading all clinic data')
@@ -602,13 +629,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       
       // Load 14 months of data from all 4 clinics
       let allClinicData = []
-      const clinicConfigs = [
-        { id: 'yokohama', name: '横浜院' },
-        { id: 'koriyama', name: '郡山院' },
-        { id: 'mito', name: '水戸院' },
-        { id: 'omiya', name: '大宮院' }
-      ]
-
       // Calculate 14 months date range
       const endDateObj = new Date(endDate)
       const fourteenMonthsAgo = new Date(endDateObj)
@@ -623,8 +643,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       })
 
       // Load data from all clinics with proper authentication - MONTHLY LOADING
-      for (let i = 0; i < clinicConfigs.length; i++) {
-        const clinic = clinicConfigs[i]
+      for (let i = 0; i < CLINIC_CONFIGS.length; i++) {
+        const clinic = CLINIC_CONFIGS[i]
         
         dispatch({
           type: 'SET_PROGRESS',
@@ -909,6 +929,103 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const loadRecentDataFromApi = async (days: number = RECENT_REFRESH_DAYS) => {
+    try {
+      console.log(`📟 [Context] loadRecentDataFromApi start - last ${days} day(s)`)
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(endDate.getDate() - days)
+
+      const startStr = startDate.toISOString().split('T')[0]
+      const endStr = endDate.toISOString().split('T')[0]
+
+      let recentRecords: any[] = []
+      const recentClinicRecords: Record<string, any[]> = {}
+
+      for (let i = 0; i < CLINIC_CONFIGS.length; i++) {
+        const clinic = CLINIC_CONFIGS[i]
+        try {
+          const clinicApi = new MedicalForceAPI()
+          clinicApi.setClinicCredentials(clinic.id)
+          await new Promise(resolve => setTimeout(resolve, 100))
+          const clinicData = await clinicApi.getDailyAccounts(startStr, endStr)
+          const valuesWithClinic = (clinicData.values || []).map(record => ({
+            ...record,
+            clinicId: clinic.id,
+            clinicName: clinic.name
+          }))
+          recentRecords.push(...valuesWithClinic)
+          recentClinicRecords[clinic.id] = valuesWithClinic
+          console.log(`✅ [Context] Recent data loaded for ${clinic.name}: ${valuesWithClinic.length} records`)
+        } catch (error) {
+          console.error(`❌ [Context] Failed to load recent data for ${clinic.name}:`, error)
+        }
+      }
+
+      if (recentRecords.length === 0) {
+        console.log('⚠️ [Context] No recent records fetched')
+        return false
+      }
+
+      const mergedDailyAccounts = mergeDailyAccountRecords(state.data.dailyAccounts, recentRecords)
+      const combinedData = buildCombinedData(mergedDailyAccounts, 'all', state.dateRange)
+      const processedPatients = dataProcessor.processDailyAccountsToPatients(combinedData)
+      const processedAccounting = dataProcessor.processDailyAccountsToAccounting(combinedData)
+
+      const updatedClinicData = { ...state.data.clinicData }
+      Object.keys(updatedClinicData).forEach(clinicId => {
+        const incoming = recentClinicRecords[clinicId] || []
+        if (!incoming.length) return
+        const existingClinic = updatedClinicData[clinicId as keyof typeof updatedClinicData]
+        const mergedClinicRecords = mergeDailyAccountRecords(existingClinic.dailyAccounts, incoming)
+        const clinicCombined = buildCombinedData(mergedClinicRecords, clinicId, state.dateRange)
+        updatedClinicData[clinicId as keyof typeof updatedClinicData] = {
+          ...existingClinic,
+          dailyAccounts: mergedClinicRecords,
+          patients: dataProcessor.processDailyAccountsToPatients(clinicCombined),
+          accounting: dataProcessor.processDailyAccountsToAccounting(clinicCombined)
+        }
+      })
+
+      dispatch({
+        type: 'SET_DATA',
+        payload: {
+          ...state.data,
+          dailyAccounts: mergedDailyAccounts,
+          patients: processedPatients,
+          accounting: processedAccounting,
+          clinicData: updatedClinicData
+        }
+      })
+
+      // Update current month metrics based on merged data
+      dispatch({
+        type: 'SET_CURRENT_MONTH_METRICS',
+        payload: {
+          visitCount: dataProcessor.calculateCurrentMonthVisitCount(combinedData),
+          accountingUnitPrice: dataProcessor.calculateCurrentMonthAccountingUnitPrice(combinedData),
+          revenue: dataProcessor.calculateCurrentMonthRevenue(combinedData)
+        }
+      })
+
+      // Update trend data to reflect latest records
+      dispatch({
+        type: 'SET_TREND_DATA',
+        payload: {
+          monthly: dataProcessor.calculateMonthlyTrends(combinedData),
+          daily: dataProcessor.calculateDailyTrends(combinedData, 30),
+          yearOverYear: dataProcessor.calculateYearOverYearComparison(combinedData)
+        }
+      })
+
+      console.log(`✅ [Context] Recent data merged (${recentRecords.length} records)`)
+      return true
+    } catch (error) {
+      console.error('❌ [Context] loadRecentDataFromApi error:', error)
+      return false
+    }
+  }
+
   const loadData = React.useCallback(async () => {
     if (!state.apiConnected) {
       throw new Error('APIが接続されていません')
@@ -987,6 +1104,41 @@ const clinicLabelMap: Record<string, string> = {
 const clinicNameToIdMap: Record<string, string> = Object.fromEntries(
   Object.entries(clinicLabelMap).map(([id, name]) => [name, id])
 )
+
+const CLINIC_CONFIGS = [
+  { id: 'yokohama', name: '横浜院' },
+  { id: 'koriyama', name: '郡山院' },
+  { id: 'mito', name: '水戸院' },
+  { id: 'omiya', name: '大宮院' }
+]
+
+const RECENT_REFRESH_INTERVAL = 12 * 60 * 60 * 1000 // 12 hours
+const RECENT_REFRESH_DAYS = 1
+
+const buildRecordKey = (record: any) => {
+  const visitorId = record.visitorId || record.visitorCode || record.visitorKarteNumber || record.visitorName || 'unknown'
+  const date =
+    record.recordDate ||
+    record.visitDate ||
+    record.treatmentDate ||
+    record.accountingDate ||
+    record.confirmedAt ||
+    'unknown'
+  const clinic = record.clinicId || record.clinicName || 'unknown'
+  return `${clinic}-${visitorId}-${date}`
+}
+
+const mergeDailyAccountRecords = (existing: any[] = [], incoming: any[] = []) => {
+  if (!incoming.length) return existing
+  const recordMap = new Map<string, any>()
+  existing.forEach(record => {
+    recordMap.set(buildRecordKey(record), record)
+  })
+  incoming.forEach(record => {
+    recordMap.set(buildRecordKey(record), record)
+  })
+  return Array.from(recordMap.values())
+}
 
 const getRecordDate = (record: any): Date | null => {
   const rawDate =
