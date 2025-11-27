@@ -6,6 +6,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { Chart } from 'react-chartjs-2'
 import { AlertCircle } from 'lucide-react'
 import { categorizeTreatment } from '@/lib/treatmentCategories'
+import Pagination from './Pagination'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend)
 
@@ -411,6 +412,9 @@ export default function ClinicSales() {
     sort: 'treatmentDate'
   }))
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(20)
+
   useEffect(() => {
     setTableFilterDraft(prev => {
       if (prev.month === defaultMonthValue) return prev
@@ -422,12 +426,18 @@ export default function ClinicSales() {
     })
   }, [defaultMonthValue])
 
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [tableFilters])
+
   const handleFilterChange = (key: 'clinic' | 'month' | 'sort', value: string) => {
     setTableFilterDraft(prev => ({ ...prev, [key]: value }))
   }
 
   const handleApplyFilters = () => {
     setTableFilters(tableFilterDraft)
+    setCurrentPage(1) // Reset to first page when filters change
   }
 
   const clinicSalesRows = useMemo(() => {
@@ -749,9 +759,39 @@ export default function ClinicSales() {
             </div>
           </div>
 
+          {/* Pagination Controls - Top */}
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <span className="font-medium">全{clinicSalesRows.length}件</span>
+                <span className="text-gray-400">|</span>
+                <label htmlFor="clinic-sales-items-per-page" className="whitespace-nowrap">表示件数:</label>
+                <select
+                  id="clinic-sales-items-per-page"
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={10}>10件</option>
+                  <option value={20}>20件</option>
+                  <option value={50}>50件</option>
+                  <option value={100}>100件</option>
+                  <option value={200}>200件</option>
+                </select>
+              </div>
+              {clinicSalesRows.length > itemsPerPage && (
+                <div className="text-sm text-gray-600">
+                  {((currentPage - 1) * itemsPerPage + 1).toLocaleString()} - {Math.min(currentPage * itemsPerPage, clinicSalesRows.length).toLocaleString()} / {clinicSalesRows.length.toLocaleString()} 件
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Detailed Table */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto border rounded-md shadow-inner">
             <table className="min-w-[1400px] divide-y divide-gray-200 text-xs">
               <thead className="bg-gray-50">
                 <tr>
@@ -786,7 +826,9 @@ export default function ClinicSales() {
                     </td>
                   </tr>
                 ) : (
-                  clinicSalesRows.map(row => (
+                  clinicSalesRows
+                    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                    .map(row => (
                     <tr key={row.id} className={row.hasDeposit ? 'bg-green-50/70' : 'hover:bg-gray-50'}>
                       <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.staff}</td>
                       <td className="px-3 py-2 text-gray-900">{row.clinic}</td>
@@ -849,6 +891,19 @@ export default function ClinicSales() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination - Bottom */}
+          {clinicSalesRows.length > 0 && (
+            <div className="mt-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(clinicSalesRows.length / itemsPerPage)}
+                onPageChange={setCurrentPage}
+                totalItems={clinicSalesRows.length}
+                itemsPerPage={itemsPerPage}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

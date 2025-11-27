@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
+import Pagination from './Pagination'
 
 interface SummaryData {
   totalRevenue: number
@@ -45,6 +46,10 @@ interface SummaryData {
 export default function SummaryAnalysis() {
   const { state } = useDashboard()
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['美容']))
+  const [referralSourcePage, setReferralSourcePage] = useState(1)
+  const [treatmentPage, setTreatmentPage] = useState(1)
+  const [referralSourceItemsPerPage, setReferralSourceItemsPerPage] = useState(9)
+  const [treatmentItemsPerPage, setTreatmentItemsPerPage] = useState(9)
   const calculationEngine = new CalculationEngine()
 
   const summaryData = useMemo(() => {
@@ -462,15 +467,59 @@ export default function SummaryAnalysis() {
             </div>
           ))}
         </div>
+
+        {/* Pagination - Bottom */}
+        {Object.keys(summaryData.referralSourceSummary).length > 0 && (
+          <div className="mt-4">
+            <Pagination
+              currentPage={referralSourcePage}
+              totalPages={Math.ceil(Object.keys(summaryData.referralSourceSummary).length / referralSourceItemsPerPage)}
+              onPageChange={setReferralSourcePage}
+              totalItems={Object.keys(summaryData.referralSourceSummary).length}
+              itemsPerPage={referralSourceItemsPerPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* 施術別サマリー */}
       <div className="p-6 bg-white rounded-lg shadow">
         <h3 className="mb-4 text-lg font-semibold text-gray-900">施術別サマリー</h3>
+        
+        {/* Pagination Controls - Top */}
+        <div className="mb-4 space-y-3">
+          <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span className="font-medium">全{Object.keys(summaryData.treatmentSummary).length}件</span>
+              <span className="text-gray-400">|</span>
+              <label htmlFor="treatment-items-per-page" className="whitespace-nowrap">表示件数:</label>
+              <select
+                id="treatment-items-per-page"
+                value={treatmentItemsPerPage}
+                onChange={(e) => {
+                  setTreatmentItemsPerPage(Number(e.target.value))
+                  setTreatmentPage(1)
+                }}
+                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={9}>9件</option>
+                <option value={18}>18件</option>
+                <option value={27}>27件</option>
+                <option value={50}>50件</option>
+              </select>
+            </div>
+            {Object.keys(summaryData.treatmentSummary).length > treatmentItemsPerPage && (
+              <div className="text-sm text-gray-600">
+                {((treatmentPage - 1) * treatmentItemsPerPage + 1).toLocaleString()} - {Math.min(treatmentPage * treatmentItemsPerPage, Object.keys(summaryData.treatmentSummary).length).toLocaleString()} / {Object.keys(summaryData.treatmentSummary).length.toLocaleString()} 件
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(summaryData.treatmentSummary)
             .sort(([,a], [,b]) => (b as any).revenue - (a as any).revenue)
-            .slice(0, 9)
+            .slice((treatmentPage - 1) * treatmentItemsPerPage, treatmentPage * treatmentItemsPerPage)
             .map(([treatment, data]: [string, any]) => (
             <div key={treatment} className="p-4 border rounded-lg">
               <div className="text-sm font-medium text-gray-600">{treatment}</div>
@@ -489,6 +538,19 @@ export default function SummaryAnalysis() {
             </div>
           ))}
         </div>
+
+        {/* Pagination - Bottom */}
+        {Object.keys(summaryData.treatmentSummary).length > 0 && (
+          <div className="mt-4">
+            <Pagination
+              currentPage={treatmentPage}
+              totalPages={Math.ceil(Object.keys(summaryData.treatmentSummary).length / treatmentItemsPerPage)}
+              onPageChange={setTreatmentPage}
+              totalItems={Object.keys(summaryData.treatmentSummary).length}
+              itemsPerPage={treatmentItemsPerPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* 階層化施術別分析 */}

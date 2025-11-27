@@ -33,7 +33,9 @@ export default function StaffSales() {
   const [clinicPage, setClinicPage] = useState(1)
   const [doctorPage, setDoctorPage] = useState(1)
   const [counselorPage, setCounselorPage] = useState(1)
-  const itemsPerPage = 10
+  const [clinicItemsPerPage, setClinicItemsPerPage] = useState(10)
+  const [doctorItemsPerPage, setDoctorItemsPerPage] = useState(10)
+  const [counselorItemsPerPage, setCounselorItemsPerPage] = useState(10)
   const [clinicSortField, setClinicSortField] = useState<string>('total')
   const [clinicSortDirection, setClinicSortDirection] = useState<'asc' | 'desc'>('desc')
   const [doctorSortField, setDoctorSortField] = useState<string>('total')
@@ -286,51 +288,78 @@ export default function StaffSales() {
         </div>
         <div className="p-4 bg-white border rounded-lg shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">院別売上</h3>
-          <div className="overflow-auto">
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr>
-                  <th 
-                    className="px-2 py-1 text-left cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleClinicSort('clinic')}
-                  >
-                    院名 {getSortIcon('clinic', clinicSortField, clinicSortDirection)}
-                  </th>
-                  {months.map((m, idx)=>(<th 
-                    key={m.label} 
-                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleClinicSort(String(idx))}
-                  >
-                    {m.label} {getSortIcon(String(idx), clinicSortField, clinicSortDirection)}
-                  </th>))}
-                  <th 
-                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleClinicSort('total')}
-                  >
-                    計 {getSortIcon('total', clinicSortField, clinicSortDirection)}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(sortedClinicRows.length > itemsPerPage ? sortedClinicRows.slice((clinicPage-1)*itemsPerPage, clinicPage*itemsPerPage) : sortedClinicRows).map((row,i)=> (
-                  <tr key={i} className="border-t">
-                    <td className="px-2 py-1">{row.clinic}</td>
-                    {row.arr.map((v,j)=>(<td key={j} className="px-2 py-1 text-right">{Math.round(v).toLocaleString()}</td>))}
-                    <td className="px-2 py-1 text-right">{Math.round(row.total).toLocaleString()}</td>
+          <div className="relative">
+            <div className="overflow-x-auto overflow-y-visible max-h-[500px] border rounded-md shadow-inner">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-gray-50">
+                  <tr>
+                    <th 
+                      className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handleClinicSort('clinic')}
+                    >
+                      院名 {getSortIcon('clinic', clinicSortField, clinicSortDirection)}
+                    </th>
+                    {months.map((m, idx)=>(<th 
+                      key={m.label} 
+                      className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                      onClick={() => handleClinicSort(String(idx))}
+                    >
+                      {m.label} {getSortIcon(String(idx), clinicSortField, clinicSortDirection)}
+                    </th>))}
+                    <th 
+                      className="sticky right-0 z-20 px-3 py-2 text-right border-l cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handleClinicSort('total')}
+                    >
+                      計 {getSortIcon('total', clinicSortField, clinicSortDirection)}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(sortedClinicRows.length > clinicItemsPerPage ? sortedClinicRows.slice((clinicPage-1)*clinicItemsPerPage, clinicPage*clinicItemsPerPage) : sortedClinicRows).map((row,i)=> (
+                    <tr key={i} className="border-t hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.clinic}</td>
+                      {row.arr.map((v,j)=>(<td key={j} className="px-3 py-2 text-right">{Math.round(v).toLocaleString()}</td>))}
+                      <td className="sticky right-0 z-10 px-3 py-2 font-semibold text-right bg-white border-l">{Math.round(row.total).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-center gap-2 mt-2 text-xs text-center text-gray-500">
+              <span>←</span>
+              <span>横にスクロールして全期間を表示</span>
+              <span>→</span>
+            </div>
           </div>
-          {sortedClinicRows.length > itemsPerPage && (
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <label htmlFor="clinic-items-per-page" className="whitespace-nowrap">表示件数:</label>
+                <select
+                  id="clinic-items-per-page"
+                  value={clinicItemsPerPage}
+                  onChange={(e) => {
+                    setClinicItemsPerPage(Number(e.target.value))
+                    setClinicPage(1)
+                  }}
+                  className="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={5}>5件</option>
+                  <option value={10}>10件</option>
+                  <option value={20}>20件</option>
+                  <option value={50}>50件</option>
+                  <option value={100}>100件</option>
+                </select>
+              </div>
+            </div>
             <Pagination
               currentPage={clinicPage}
-              totalPages={Math.ceil(sortedClinicRows.length / itemsPerPage)}
+              totalPages={Math.ceil(sortedClinicRows.length / clinicItemsPerPage)}
               onPageChange={setClinicPage}
               totalItems={sortedClinicRows.length}
-              itemsPerPage={itemsPerPage}
+              itemsPerPage={clinicItemsPerPage}
             />
-          )}
+          </div>
         </div>
       </div>
 
@@ -338,43 +367,50 @@ export default function StaffSales() {
         {/* Doctor table */}
         <div className="p-4 bg-white border rounded-lg shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">ドクター別売上</h3>
-          <div className="overflow-auto">
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr>
-                  <th 
-                    className="px-2 py-1 text-left cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleDoctorSort('name')}
-                  >
-                    担当者 {getSortIcon('name', doctorSortField, doctorSortDirection)}
-                  </th>
-                  {months.map((m, idx)=>(<th 
-                    key={m.label} 
-                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleDoctorSort(String(idx))}
-                  >
-                    {m.label} {getSortIcon(String(idx), doctorSortField, doctorSortDirection)}
-                  </th>))}
-                  <th 
-                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleDoctorSort('total')}
-                  >
-                    計 {getSortIcon('total', doctorSortField, doctorSortDirection)}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(sortedDoctorRows.length > itemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*itemsPerPage, doctorPage*itemsPerPage) : sortedDoctorRows).map((row,i)=> (
-                  <tr key={i} className="border-t">
-                    <td className="px-2 py-1">{row.name}</td>
-                    {row.arr.map((v,j)=>(<td key={j} className="px-2 py-1 text-right">{Math.round(v).toLocaleString()}</td>))}
-                    <td className="px-2 py-1 text-right">{Math.round(row.total).toLocaleString()}</td>
+          <div className="relative">
+            <div className="overflow-x-auto overflow-y-visible max-h-[500px] border rounded-md shadow-inner">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-gray-50">
+                  <tr>
+                    <th 
+                      className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handleDoctorSort('name')}
+                    >
+                      担当者 {getSortIcon('name', doctorSortField, doctorSortDirection)}
+                    </th>
+                    {months.map((m, idx)=>(<th 
+                      key={m.label} 
+                      className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                      onClick={() => handleDoctorSort(String(idx))}
+                    >
+                      {m.label} {getSortIcon(String(idx), doctorSortField, doctorSortDirection)}
+                    </th>))}
+                    <th 
+                      className="sticky right-0 z-20 px-3 py-2 text-right border-l cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handleDoctorSort('total')}
+                    >
+                      計 {getSortIcon('total', doctorSortField, doctorSortDirection)}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(sortedDoctorRows.length > itemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*itemsPerPage, doctorPage*itemsPerPage) : sortedDoctorRows).map((row,i)=> (
+                    <tr key={i} className="border-t hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.name}</td>
+                      {row.arr.map((v,j)=>(<td key={j} className="px-3 py-2 text-right">{Math.round(v).toLocaleString()}</td>))}
+                      <td className="sticky right-0 z-10 px-3 py-2 font-semibold text-right bg-white border-l">{Math.round(row.total).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-center gap-2 mt-2 text-xs text-center text-gray-500">
+              <span>←</span>
+              <span>横にスクロールして全期間を表示</span>
+              <span>→</span>
+            </div>
           </div>
-          {sortedDoctorRows.length > itemsPerPage && (
+          <div className="mt-4">
             <Pagination
               currentPage={doctorPage}
               totalPages={Math.ceil(sortedDoctorRows.length / itemsPerPage)}
@@ -382,49 +418,56 @@ export default function StaffSales() {
               totalItems={sortedDoctorRows.length}
               itemsPerPage={itemsPerPage}
             />
-          )}
+          </div>
         </div>
 
         {/* Counselor table */}
         <div className="p-4 bg-white border rounded-lg shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">カウンセラー別売上</h3>
-          <div className="overflow-auto">
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr>
-                  <th 
-                    className="px-2 py-1 text-left cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleCounselorSort('name')}
-                  >
-                    担当者 {getSortIcon('name', counselorSortField, counselorSortDirection)}
-                  </th>
-                  {months.map((m, idx)=>(<th 
-                    key={m.label} 
-                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleCounselorSort(String(idx))}
-                  >
-                    {m.label} {getSortIcon(String(idx), counselorSortField, counselorSortDirection)}
-                  </th>))}
-                  <th 
-                    className="px-2 py-1 text-right cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleCounselorSort('total')}
-                  >
-                    計 {getSortIcon('total', counselorSortField, counselorSortDirection)}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(sortedCounselorRows.length > itemsPerPage ? sortedCounselorRows.slice((counselorPage-1)*itemsPerPage, counselorPage*itemsPerPage) : sortedCounselorRows).map((row,i)=> (
-                  <tr key={i} className="border-t">
-                    <td className="px-2 py-1">{row.name}</td>
-                    {row.arr.map((v,j)=>(<td key={j} className="px-2 py-1 text-right">{Math.round(v).toLocaleString()}</td>))}
-                    <td className="px-2 py-1 text-right">{Math.round(row.total).toLocaleString()}</td>
+          <div className="relative">
+            <div className="overflow-x-auto overflow-y-visible max-h-[500px] border rounded-md shadow-inner">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-gray-50">
+                  <tr>
+                    <th 
+                      className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handleCounselorSort('name')}
+                    >
+                      担当者 {getSortIcon('name', counselorSortField, counselorSortDirection)}
+                    </th>
+                    {months.map((m, idx)=>(<th 
+                      key={m.label} 
+                      className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                      onClick={() => handleCounselorSort(String(idx))}
+                    >
+                      {m.label} {getSortIcon(String(idx), counselorSortField, counselorSortDirection)}
+                    </th>))}
+                    <th 
+                      className="sticky right-0 z-20 px-3 py-2 text-right border-l cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handleCounselorSort('total')}
+                    >
+                      計 {getSortIcon('total', counselorSortField, counselorSortDirection)}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(sortedCounselorRows.length > itemsPerPage ? sortedCounselorRows.slice((counselorPage-1)*itemsPerPage, counselorPage*itemsPerPage) : sortedCounselorRows).map((row,i)=> (
+                    <tr key={i} className="border-t hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.name}</td>
+                      {row.arr.map((v,j)=>(<td key={j} className="px-3 py-2 text-right">{Math.round(v).toLocaleString()}</td>))}
+                      <td className="sticky right-0 z-10 px-3 py-2 font-semibold text-right bg-white border-l">{Math.round(row.total).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-center gap-2 mt-2 text-xs text-center text-gray-500">
+              <span>←</span>
+              <span>横にスクロールして全期間を表示</span>
+              <span>→</span>
+            </div>
           </div>
-          {sortedCounselorRows.length > itemsPerPage && (
+          <div className="mt-4">
             <Pagination
               currentPage={counselorPage}
               totalPages={Math.ceil(sortedCounselorRows.length / itemsPerPage)}
@@ -432,7 +475,7 @@ export default function StaffSales() {
               totalItems={sortedCounselorRows.length}
               itemsPerPage={itemsPerPage}
             />
-          )}
+          </div>
         </div>
       </div>
     </div>

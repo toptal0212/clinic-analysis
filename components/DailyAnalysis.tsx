@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useDashboard } from '@/contexts'
 import { CalculationEngine } from '@/lib/calculationEngine'
 import { RevenueMetrics } from '@/lib/dataTypes'
@@ -13,6 +13,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react'
+import Pagination from './Pagination'
 
 interface DailyAnalysisProps {
   dateRange: { start: Date, end: Date }
@@ -22,7 +23,16 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
   const { state } = useDashboard()
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [newPatientPage, setNewPatientPage] = useState(1)
+  const [existingPatientPage, setExistingPatientPage] = useState(1)
+  const [newPatientItemsPerPage, setNewPatientItemsPerPage] = useState(10)
   const calculationEngine = new CalculationEngine()
+
+  // Reset page when selected date changes
+  useEffect(() => {
+    setNewPatientPage(1)
+    setExistingPatientPage(1)
+  }, [selectedDate])
 
   const dailyData = useMemo(() => {
     // Return empty array if no real data is available (no dummy data)
@@ -588,7 +598,38 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
           {selectedDayData.newPatients.length > 0 && (
             <div className="mt-6">
               <h4 className="mb-3 font-semibold text-gray-900">新規患者詳細</h4>
-              <div className="overflow-x-auto">
+              
+              {/* Pagination Controls - Top */}
+              <div className="mb-4 space-y-3">
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <span className="font-medium">全{selectedDayData.newPatients.length}件</span>
+                    <span className="text-gray-400">|</span>
+                    <label htmlFor="new-patient-items-per-page" className="whitespace-nowrap">表示件数:</label>
+                    <select
+                      id="new-patient-items-per-page"
+                      value={newPatientItemsPerPage}
+                      onChange={(e) => {
+                        setNewPatientItemsPerPage(Number(e.target.value))
+                        setNewPatientPage(1)
+                      }}
+                      className="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value={10}>10件</option>
+                      <option value={20}>20件</option>
+                      <option value={50}>50件</option>
+                      <option value={100}>100件</option>
+                    </select>
+                  </div>
+                  {selectedDayData.newPatients.length > newPatientItemsPerPage && (
+                    <div className="text-sm text-gray-600">
+                      {((newPatientPage - 1) * newPatientItemsPerPage + 1).toLocaleString()} - {Math.min(newPatientPage * newPatientItemsPerPage, selectedDayData.newPatients.length).toLocaleString()} / {selectedDayData.newPatients.length.toLocaleString()} 件
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border rounded-md shadow-inner">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -613,8 +654,10 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedDayData.newPatients.map((record, index) => (
-                      <tr key={index}>
+                    {selectedDayData.newPatients
+                      .slice((newPatientPage - 1) * newPatientItemsPerPage, newPatientPage * newPatientItemsPerPage)
+                      .map((record, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                           {record.visitorName || 'N/A'}
                         </td>
@@ -638,6 +681,19 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination - Bottom */}
+              {selectedDayData.newPatients.length > 0 && (
+                <div className="mt-4">
+                  <Pagination
+                    currentPage={newPatientPage}
+                    totalPages={Math.ceil(selectedDayData.newPatients.length / newPatientItemsPerPage)}
+                    onPageChange={setNewPatientPage}
+                    totalItems={selectedDayData.newPatients.length}
+                    itemsPerPage={newPatientItemsPerPage}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
