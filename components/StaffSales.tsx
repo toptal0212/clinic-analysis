@@ -394,7 +394,7 @@ export default function StaffSales() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(sortedDoctorRows.length > itemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*itemsPerPage, doctorPage*itemsPerPage) : sortedDoctorRows).map((row,i)=> (
+                  {(sortedDoctorRows.length > doctorItemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*doctorItemsPerPage, doctorPage*doctorItemsPerPage) : sortedDoctorRows).map((row,i)=> (
                     <tr key={i} className="border-t hover:bg-gray-50">
                       <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.name}</td>
                       {row.arr.map((v,j)=>(<td key={j} className="px-3 py-2 text-right">{Math.round(v).toLocaleString()}</td>))}
@@ -413,10 +413,10 @@ export default function StaffSales() {
           <div className="mt-4">
             <Pagination
               currentPage={doctorPage}
-              totalPages={Math.ceil(sortedDoctorRows.length / itemsPerPage)}
+              totalPages={Math.ceil(sortedDoctorRows.length / doctorItemsPerPage)}
               onPageChange={setDoctorPage}
               totalItems={sortedDoctorRows.length}
-              itemsPerPage={itemsPerPage}
+              itemsPerPage={doctorItemsPerPage}
             />
           </div>
         </div>
@@ -451,10 +451,18 @@ export default function StaffSales() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(sortedCounselorRows.length > itemsPerPage ? sortedCounselorRows.slice((counselorPage-1)*itemsPerPage, counselorPage*itemsPerPage) : sortedCounselorRows).map((row,i)=> (
+                  {(sortedCounselorRows.length > counselorItemsPerPage
+                    ? sortedCounselorRows.slice(
+                        (counselorPage - 1) * counselorItemsPerPage,
+                        counselorPage * counselorItemsPerPage
+                      )
+                    : sortedCounselorRows
+                  ).map((row, i) => (
                     <tr key={i} className="border-t hover:bg-gray-50">
                       <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.name}</td>
-                      {row.arr.map((v,j)=>(<td key={j} className="px-3 py-2 text-right">{Math.round(v).toLocaleString()}</td>))}
+                      {row.arr.map((v, j) => (
+                        <td key={j} className="px-3 py-2 text-right">{Math.round(v).toLocaleString()}</td>
+                      ))}
                       <td className="sticky right-0 z-10 px-3 py-2 font-semibold text-right bg-white border-l">{Math.round(row.total).toLocaleString()}</td>
                     </tr>
                   ))}
@@ -470,10 +478,10 @@ export default function StaffSales() {
           <div className="mt-4">
             <Pagination
               currentPage={counselorPage}
-              totalPages={Math.ceil(sortedCounselorRows.length / itemsPerPage)}
+              totalPages={Math.ceil(sortedCounselorRows.length / counselorItemsPerPage)}
               onPageChange={setCounselorPage}
               totalItems={sortedCounselorRows.length}
-              itemsPerPage={itemsPerPage}
+              itemsPerPage={counselorItemsPerPage}
             />
           </div>
         </div>

@@ -742,7 +742,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       // Process each clinic's data separately
       allClinicData.forEach((clinicDataItem, index) => {
-        const clinic = clinicConfigs[index]
+        const clinic = CLINIC_CONFIGS[index]
         if (clinic && clinicDataItem.values) {
           console.log(`🔍 [DEBUG] Processing data for ${clinic.name}:`, {
             clinicId: clinic.id,
