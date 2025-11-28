@@ -44,12 +44,16 @@ export default function StaffSales() {
   const [counselorSortDirection, setCounselorSortDirection] = useState<'asc' | 'desc'>('desc')
   const [ucPage, setUcPage] = useState(1)
   const [reservationRoutePage, setReservationRoutePage] = useState(1)
+  const [patientTypePage, setPatientTypePage] = useState(1)
   const [ucItemsPerPage, setUcItemsPerPage] = useState(10)
   const [reservationRouteItemsPerPage, setReservationRouteItemsPerPage] = useState(10)
+  const [patientTypeItemsPerPage, setPatientTypeItemsPerPage] = useState(10)
   const [ucSortField, setUcSortField] = useState<string>('total')
   const [ucSortDirection, setUcSortDirection] = useState<'asc' | 'desc'>('desc')
   const [reservationRouteSortField, setReservationRouteSortField] = useState<string>('total')
   const [reservationRouteSortDirection, setReservationRouteSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [patientTypeSortField, setPatientTypeSortField] = useState<string>('total')
+  const [patientTypeSortDirection, setPatientTypeSortDirection] = useState<'asc' | 'desc'>('desc')
 
   // last 12 months labels (YYYY/MM)
   const months = useMemo(() => {
@@ -335,6 +339,85 @@ export default function StaffSales() {
     return sorted
   }, [ucRows, ucSortField, ucSortDirection])
 
+  // Patient type rows (新規・既存・物販)
+  const determinePatientType = (record: any) => {
+    const paymentTags = record.paymentTags || ''
+    const visitorName = record.visitorName || ''
+    if (
+      paymentTags.includes('物販') ||
+      paymentTags.includes('ピアス') ||
+      visitorName.includes('物販') ||
+      visitorName.includes('ピアス')
+    ) {
+      return '物販'
+    }
+    if (record.isFirst === true || record.isFirstVisit === true) return '新規'
+    return '既存'
+  }
+
+  const patientTypeRows = useMemo(() => {
+    const typeMap = new Map<string, { revenue: number[], count: number[] }>()
+    all.forEach(r => {
+      const d = toDate(r.recordDate || r.visitDate || r.treatmentDate || r.accountingDate)
+      if (!d) return
+      const idx = months.findIndex(x => x.y === d.getFullYear() && x.m === d.getMonth() + 1)
+      if (idx < 0) return
+      
+      const patientType = determinePatientType(r)
+      if (!typeMap.has(patientType)) {
+        typeMap.set(patientType, { revenue: new Array(12).fill(0), count: new Array(12).fill(0) })
+      }
+      const data = typeMap.get(patientType)!
+      
+      let amount = 0
+      if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+        amount = r.paymentItems.reduce((s: number, it: any) => s + (it.priceWithTax || 0), 0)
+      } else {
+        amount = r.totalWithTax || 0
+      }
+      data.revenue[idx] += amount
+      data.count[idx] += 1
+    })
+    return Array.from(typeMap.entries()).map(([type, data]) => {
+      const totalRevenue = data.revenue.reduce((a, b) => a + b, 0)
+      const totalCount = data.count.reduce((a, b) => a + b, 0)
+      return {
+        type,
+        revenue: data.revenue,
+        count: data.count,
+        totalRevenue,
+        totalCount,
+        totalUnitPrice: totalCount > 0 ? totalRevenue / totalCount : 0
+      }
+    })
+  }, [all, months])
+
+  // Sort patient type rows
+  const sortedPatientTypeRows = useMemo(() => {
+    const sorted = [...patientTypeRows]
+    sorted.sort((a, b) => {
+      if (patientTypeSortField === 'type') {
+        return patientTypeSortDirection === 'asc'
+          ? a.type.localeCompare(b.type, 'ja')
+          : b.type.localeCompare(a.type, 'ja')
+      }
+      if (patientTypeSortField === 'total') {
+        return patientTypeSortDirection === 'asc'
+          ? a.totalRevenue - b.totalRevenue
+          : b.totalRevenue - a.totalRevenue
+      }
+      // Sort by specific month (revenue)
+      const monthIndex = parseInt(patientTypeSortField)
+      if (!isNaN(monthIndex) && monthIndex >= 0 && monthIndex < 12) {
+        return patientTypeSortDirection === 'asc'
+          ? a.revenue[monthIndex] - b.revenue[monthIndex]
+          : b.revenue[monthIndex] - a.revenue[monthIndex]
+      }
+      return 0
+    })
+    return sorted
+  }, [patientTypeRows, patientTypeSortField, patientTypeSortDirection])
+
   // Reservation route rows
   const reservationRouteRows = useMemo(() => {
     const routeMap = new Map<string, { arr: number[], ucArr: number[] }>()
@@ -442,6 +525,16 @@ export default function StaffSales() {
       setReservationRouteSortDirection('desc')
     }
     setReservationRoutePage(1)
+  }
+
+  const handlePatientTypeSort = (field: string) => {
+    if (patientTypeSortField === field) {
+      setPatientTypeSortDirection(patientTypeSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setPatientTypeSortField(field)
+      setPatientTypeSortDirection('desc')
+    }
+    setPatientTypePage(1)
   }
 
   if (all.length === 0) {
@@ -1023,6 +1116,122 @@ export default function StaffSales() {
               onPageChange={setReservationRoutePage}
               totalItems={sortedReservationRouteRows.length}
               itemsPerPage={reservationRouteItemsPerPage}
+            />
+          </div>
+        </div>
+
+        {/* Patient Type table (新規・既存・物販) */}
+        <div className="p-4 bg-white border rounded-lg shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-gray-900">新規・既存・物販</h3>
+          <div className="mt-4 mb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="font-medium">全{sortedPatientTypeRows.length.toLocaleString()}件</span>
+                <span className="text-gray-400">|</span>
+                <label htmlFor="patient-type-items-per-page" className="whitespace-nowrap">表示件数:</label>
+                <select
+                  id="patient-type-items-per-page"
+                  value={patientTypeItemsPerPage}
+                  onChange={(e) => {
+                    setPatientTypeItemsPerPage(Number(e.target.value))
+                    setPatientTypePage(1)
+                  }}
+                  className="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={5}>5件</option>
+                  <option value={10}>10件</option>
+                  <option value={20}>20件</option>
+                  <option value={50}>50件</option>
+                  <option value={100}>100件</option>
+                </select>
+              </div>
+              {sortedPatientTypeRows.length > patientTypeItemsPerPage && (
+                <div className="text-sm text-gray-700">
+                  {(patientTypePage - 1) * patientTypeItemsPerPage + 1} - {Math.min(patientTypePage * patientTypeItemsPerPage, sortedPatientTypeRows.length)} / {sortedPatientTypeRows.length.toLocaleString()} 件
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="relative">
+            <div className="overflow-x-auto overflow-y-visible max-h-[500px] border rounded-md shadow-inner">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-gray-50">
+                  <tr>
+                    <th 
+                      rowSpan={2}
+                      className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handlePatientTypeSort('type')}
+                    >
+                      区分 {getSortIcon('type', patientTypeSortField, patientTypeSortDirection)}
+                    </th>
+                    {months.map((m, idx)=>(<th 
+                      key={m.label}
+                      colSpan={3}
+                      className="px-3 py-2 text-center cursor-pointer hover:bg-gray-100 whitespace-nowrap border-x"
+                      onClick={() => handlePatientTypeSort(String(idx))}
+                    >
+                      {m.label} {getSortIcon(String(idx), patientTypeSortField, patientTypeSortDirection)}
+                    </th>))}
+                    <th 
+                      rowSpan={2}
+                      className="sticky right-0 z-20 px-3 py-2 text-right border-l cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
+                      onClick={() => handlePatientTypeSort('total')}
+                    >
+                      計 {getSortIcon('total', patientTypeSortField, patientTypeSortDirection)}
+                    </th>
+                  </tr>
+                  <tr>
+                    {months.map((m, idx)=>(<React.Fragment key={`sub-${m.label}`}>
+                      <th className="px-2 py-1 text-xs text-right border-x">売上</th>
+                      <th className="px-2 py-1 text-xs text-right border-x">件数</th>
+                      <th className="px-2 py-1 text-xs text-right border-x">当月単価</th>
+                    </React.Fragment>))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(sortedPatientTypeRows.length > patientTypeItemsPerPage
+                    ? sortedPatientTypeRows.slice(
+                        (patientTypePage - 1) * patientTypeItemsPerPage,
+                        patientTypePage * patientTypeItemsPerPage
+                      )
+                    : sortedPatientTypeRows
+                  ).map((row, i) => (
+                    <tr key={i} className="border-t hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.type}</td>
+                      {row.revenue.map((revenue, j) => {
+                        const count = row.count[j]
+                        const unitPrice = count > 0 ? revenue / count : 0
+                        return (
+                          <React.Fragment key={j}>
+                            <td className="px-2 py-2 text-right border-x">{Math.round(revenue).toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right border-x">{count.toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right border-x">{Math.round(unitPrice).toLocaleString()}</td>
+                          </React.Fragment>
+                        )
+                      })}
+                      <td className="sticky right-0 z-10 px-3 py-2 font-semibold text-right bg-white border-l">
+                        <div>{Math.round(row.totalRevenue).toLocaleString()}</div>
+                        <div className="text-xs text-gray-500">{row.totalCount.toLocaleString()}</div>
+                        <div className="text-xs text-gray-500">{Math.round(row.totalUnitPrice).toLocaleString()}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-center gap-2 mt-2 text-xs text-center text-gray-500">
+              <span>←</span>
+              <span>横にスクロールして全期間を表示</span>
+              <span>→</span>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Pagination
+              currentPage={patientTypePage}
+              totalPages={Math.ceil(sortedPatientTypeRows.length / patientTypeItemsPerPage)}
+              onPageChange={setPatientTypePage}
+              totalItems={sortedPatientTypeRows.length}
+              itemsPerPage={patientTypeItemsPerPage}
             />
           </div>
         </div>
