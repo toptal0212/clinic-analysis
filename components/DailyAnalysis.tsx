@@ -1,120 +1,191 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useDashboard } from '@/contexts'
-import { CalculationEngine } from '@/lib/calculationEngine'
-import { RevenueMetrics } from '@/lib/dataTypes'
-import { 
-  Calendar,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  DollarSign,
-  Eye,
-  EyeOff
-} from 'lucide-react'
-import Pagination from './Pagination'
+import { loadGoalsFromStorage } from '@/lib/goalStorage'
 
 interface DailyAnalysisProps {
   dateRange: { start: Date, end: Date }
 }
 
+function toDate(v: any) {
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? null : d
+}
+
 export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
   const { state } = useDashboard()
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [showDetails, setShowDetails] = useState(false)
-  const [newPatientPage, setNewPatientPage] = useState(1)
-  const [existingPatientPage, setExistingPatientPage] = useState(1)
-  const [newPatientItemsPerPage, setNewPatientItemsPerPage] = useState(10)
-  const calculationEngine = new CalculationEngine()
+  const [selectedClinic, setSelectedClinic] = useState<string>('all')
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
 
-  // Reset page when selected date changes
-  useEffect(() => {
-    setNewPatientPage(1)
-    setExistingPatientPage(1)
-  }, [selectedDate])
+  const goals = useMemo(() => loadGoalsFromStorage(), [])
 
-  const dailyData = useMemo(() => {
-    // Return empty array if no real data is available (no dummy data)
-    if (!state.apiConnected || !state.data.dailyAccounts.length) {
-      console.log('🔍 [DEBUG] DailyAnalysis - No data available')
-      return []
+  // Get all daily accounts
+  const allData = useMemo(() => {
+    const all: any[] = []
+    if (state.data.dailyAccounts?.length) all.push(...state.data.dailyAccounts)
+    if (state.data.clinicData) {
+      Object.values(state.data.clinicData).forEach((c: any) => {
+        if (c?.dailyAccounts?.length) all.push(...c.dailyAccounts)
+      })
     }
+    return all
+  }, [state.data.dailyAccounts, state.data.clinicData])
 
-    // Group daily accounts by date
-    const dailyGroups = new Map<string, any[]>()
+  // Parse selected month
+  const [selectedYear, selectedMonthNum] = useMemo(() => {
+    const [year, month] = selectedMonth.split('/').map(Number)
+    return [year, month]
+  }, [selectedMonth])
+
+  // Get days in month
+  const daysInMonth = useMemo(() => {
+    return new Date(selectedYear, selectedMonthNum, 0).getDate()
+  }, [selectedYear, selectedMonthNum])
+
+  // Get unique clinics/staff
+  const entities = useMemo(() => {
+    const clinicSet = new Set<string>()
+    const staffSet = new Set<string>()
     
-    state.data.dailyAccounts.forEach((record: any) => {
-      const recordDate = new Date(record.recordDate).toISOString().split('T')[0]
-      if (!dailyGroups.has(recordDate)) {
-        dailyGroups.set(recordDate, [])
+    allData.forEach((r: any) => {
+      const clinic = r.clinicName || 'その他'
+      clinicSet.add(clinic)
+      
+      if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+        r.paymentItems.forEach((it: any) => {
+          const staff = it.mainStaffName || it.staffName || r.staffName || 'その他'
+          if (staff) staffSet.add(staff)
+        })
+      } else {
+        const staff = r.staffName || r.doctorName || 'その他'
+        if (staff) staffSet.add(staff)
       }
-      dailyGroups.get(recordDate)!.push(record)
     })
+    
+    return {
+      clinics: Array.from(clinicSet).sort(),
+      staff: Array.from(staffSet).sort()
+    }
+  }, [allData])
 
-    const data: Array<{
-      dateString: string
-      totalRevenue: number
-      totalCount: number
-      newCount: number
-      existingCount: number
-      newRevenue: number
-      existingRevenue: number
-      dailyAverage: number
-      newDailyAverage: number
-      existingDailyAverage: number
-      newPatients: any[]
-      existingPatients: any[]
-    }> = []
+  // Calculate data for each entity (clinic or staff)
+  const entityData = useMemo(() => {
+    const entitiesToProcess = selectedClinic === 'all' 
+      ? [...entities.clinics, ...entities.staff]
+      : [selectedClinic]
 
-    const currentDate = new Date(dateRange.start)
-    const endDate = new Date(dateRange.end)
-
-    while (currentDate <= endDate) {
-      const dateString = currentDate.toISOString().split('T')[0]
-      const dayRecords = dailyGroups.get(dateString) || []
-
-      // Calculate metrics for this day
-      const totalRevenue = dayRecords.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-      const totalCount = dayRecords.length
-      
-      const newPatients = dayRecords.filter(record => record.isFirst === true)
-      const existingPatients = dayRecords.filter(record => record.isFirst === false)
-      
-      const newCount = newPatients.length
-      const existingCount = existingPatients.length
-      
-      const newRevenue = newPatients.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-      const existingRevenue = existingPatients.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-      
-      const dailyAverage = totalCount > 0 ? totalRevenue / totalCount : 0
-      const newDailyAverage = newCount > 0 ? newRevenue / newCount : 0
-      const existingDailyAverage = existingCount > 0 ? existingRevenue / existingCount : 0
-
-      data.push({
-        dateString,
-        totalRevenue,
-        totalCount,
-        newCount,
-        existingCount,
-        newRevenue,
-        existingRevenue,
-        dailyAverage,
-        newDailyAverage,
-        existingDailyAverage,
-        newPatients,
-        existingPatients
+    return entitiesToProcess.map(entity => {
+      // Filter data for this entity
+      const isClinic = entities.clinics.includes(entity)
+      const entityRecords = allData.filter((r: any) => {
+        const d = toDate(r.recordDate || r.visitDate || r.treatmentDate || r.accountingDate)
+        if (!d) return false
+        if (d.getFullYear() !== selectedYear || d.getMonth() + 1 !== selectedMonthNum) return false
+        
+        if (isClinic) {
+          return (r.clinicName || 'その他') === entity
+        } else {
+          // Staff
+          if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+            return r.paymentItems.some((it: any) => 
+              (it.mainStaffName || it.staffName || r.staffName) === entity
+            )
+          }
+          return (r.staffName || r.doctorName || 'その他') === entity
+        }
       })
 
-      currentDate.setDate(currentDate.getDate() + 1)
-    }
+      // Calculate daily sales (1日-30日)
+      const dailySales = new Array(31).fill(0) // 0-indexed, 1-30 used
+      entityRecords.forEach((r: any) => {
+        const d = toDate(r.recordDate || r.visitDate || r.treatmentDate || r.accountingDate)
+        if (!d) return
+        const day = d.getDate()
+        if (day >= 1 && day <= 30) {
+          let amount = 0
+          if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+            amount = r.paymentItems.reduce((s: number, it: any) => s + (it.priceWithTax || 0), 0)
+          } else {
+            amount = r.totalWithTax || 0
+          }
+          dailySales[day] += amount
+        }
+      })
 
-    return data
-  }, [state.data.dailyAccounts, state.apiConnected, dateRange])
+      // Calculate totals
+      const totalRevenue = entityRecords.reduce((sum: number, r: any) => {
+        if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+          return sum + r.paymentItems.reduce((s: number, it: any) => s + (it.priceWithTax || 0), 0)
+        }
+        return sum + (r.totalWithTax || 0)
+      }, 0)
 
-  const selectedDayData = selectedDate 
-    ? dailyData.find(d => d.dateString === selectedDate.toISOString().split('T')[0])
-    : null
+      const totalCount = entityRecords.length
+      const existingCount = entityRecords.filter((r: any) => !r.isFirst).length
+      const existingRatio = totalCount > 0 ? (existingCount / totalCount) * 100 : 0
+
+      // Get target from goals
+      const goal = goals.find(g => g.staffName === entity || g.staffName === `${entity}院`)
+      const target = goal?.targetAmount || 45000000 // Default target
+      const dailyTarget = target / daysInMonth
+      const achievementDaily = totalRevenue / daysInMonth
+
+      // Calculate second half of month (16日-末日)
+      const secondHalfStart = 16
+      const secondHalfRevenue = dailySales.slice(secondHalfStart).reduce((a, b) => a + b, 0)
+      const secondHalfDays = daysInMonth - secondHalfStart + 1
+      const secondHalfTarget = (target / daysInMonth) * secondHalfDays
+      const secondHalfAchievementDaily = secondHalfRevenue / secondHalfDays
+
+      // Calculate upsell (simplified - you may need to adjust based on actual data structure)
+      const consultationCount = entityRecords.length
+      const upsellCount = entityRecords.filter((r: any) => {
+        // Check if record has multiple payment items or additional services
+        return Array.isArray(r.paymentItems) && r.paymentItems.length > 1
+      }).length
+      const upsellRatio = consultationCount > 0 ? (upsellCount / consultationCount) * 100 : 0
+
+      // Calculate treatment request ratio (simplified)
+      const consultedCount = entityRecords.length
+      const csNextWeekCount = entityRecords.filter((r: any) => {
+        // Placeholder logic - adjust based on actual data
+        return r.appointmentDate && new Date(r.appointmentDate) > new Date(r.recordDate)
+      }).length
+      const sameDayCount = entityRecords.filter((r: any) => {
+        const recordDate = toDate(r.recordDate || r.visitDate)
+        const appointmentDate = toDate(r.appointmentDate)
+        if (!recordDate || !appointmentDate) return false
+        return recordDate.toISOString().split('T')[0] === appointmentDate.toISOString().split('T')[0]
+      }).length
+      const overallCount = consultedCount
+
+      return {
+        name: entity,
+        dailySales,
+        totalRevenue,
+        totalCount,
+        existingCount,
+        existingRatio,
+        target,
+        dailyTarget,
+        achievementDaily,
+        secondHalfRevenue,
+        secondHalfTarget,
+        secondHalfAchievementDaily,
+        consultationCount,
+        upsellCount,
+        upsellRatio,
+        consultedCount,
+        csNextWeekCount,
+        sameDayCount,
+        overallCount
+      }
+    })
+  }, [allData, selectedClinic, selectedYear, selectedMonthNum, daysInMonth, goals, entities])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -129,40 +200,11 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
     return new Intl.NumberFormat('ja-JP').format(num)
   }
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('ja-JP', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      weekday: 'short'
-    }).format(date)
-  }
-
-  const getTrendIcon = (current: number, previous: number) => {
-    if (current > previous) return <TrendingUp className="w-4 h-4 text-green-500" />
-    if (current < previous) return <TrendingDown className="w-4 h-4 text-red-500" />
-    return null
-  }
-
-  const getTrendColor = (current: number, previous: number) => {
-    if (current > previous) return 'text-green-600'
-    if (current < previous) return 'text-red-600'
-    return 'text-gray-600'
-  }
-
-  const calculateTrend = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? 100 : 0
-    return ((current - previous) / previous) * 100
-  }
-
-  // Show empty state if no data
-  if (!state.apiConnected || !state.data.dailyAccounts.length || dailyData.length === 0) {
+  if (!state.apiConnected || allData.length === 0) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
-          <p className="text-sm text-gray-600">
-            📊 データがありません。APIに接続してデータを取得してください。
-          </p>
+      <div className="p-6">
+        <div className="p-8 text-center bg-white border rounded-lg shadow-sm">
+          <p className="text-lg text-gray-600">データがありません</p>
         </div>
       </div>
     )
@@ -170,534 +212,190 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
 
   return (
     <div className="space-y-6">
-
-      {/* 日別分析サマリー */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">日別分析サマリー</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">総売上</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(dailyData.reduce((sum, day) => sum + day.totalRevenue, 0))}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-green-600" />
-            </div>
+      {/* Filters */}
+      <div className="p-4 bg-white border rounded-lg shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label htmlFor="clinic-select" className="text-sm font-medium text-gray-700">院:</label>
+            <select
+              id="clinic-select"
+              value={selectedClinic}
+              onChange={(e) => setSelectedClinic(e.target.value)}
+              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">すべて</option>
+              {entities.clinics.map(clinic => (
+                <option key={clinic} value={clinic}>{clinic}</option>
+              ))}
+              {entities.staff.map(staff => (
+                <option key={staff} value={staff}>{staff}</option>
+              ))}
+            </select>
           </div>
-
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">総件数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(dailyData.reduce((sum, day) => sum + day.totalCount, 0))}
-                </p>
-              </div>
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="month-select" className="text-sm font-medium text-gray-700">月:</label>
+            <select
+              id="month-select"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {(() => {
+                const options = []
+                const now = new Date()
+                for (let i = 11; i >= 0; i--) {
+                  const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+                  const value = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}`
+                  options.push(
+                    <option key={value} value={value}>{value}</option>
+                  )
+                }
+                return options
+              })()}
+            </select>
           </div>
-
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">平均単価</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(
-                    dailyData.length > 0 
-                      ? dailyData.reduce((sum, day) => sum + day.dailyAverage, 0) / dailyData.length
-                      : 0
-                  )}
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-purple-600" />
-            </div>
-          </div>
-
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">新規患者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(dailyData.reduce((sum, day) => sum + day.newCount, 0))}
-                </p>
-              </div>
-              <Calendar className="w-8 h-8 text-orange-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 日別売上チャート */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">日別売上推移</h3>
-            <p className="text-sm text-gray-600">
-              {new Date(dateRange.start).toLocaleDateString('ja-JP', { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric' 
-              })} ～ {new Date(dateRange.end).toLocaleDateString('ja-JP', { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric' 
-              })} の分析データ (過去30日間)
-            </p>
-          </div>
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900"
-          >
-            {showDetails ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            <span>{showDetails ? '詳細を隠す' : '詳細を表示'}</span>
+          <button className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+            使用
           </button>
         </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
-          {dailyData.map((day, index) => {
-            const previousDay = index > 0 ? dailyData[index - 1] : null
-            const isSelected = selectedDate && day.dateString === selectedDate.toISOString().split('T')[0]
-            
-            return (
-              <div
-                key={day.dateString}
-                onClick={() => setSelectedDate(new Date(day.dateString))}
-                className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-                  isSelected 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-center">
-                  <div className="text-xs font-medium text-gray-900">
-                    {formatDate(new Date(day.dateString))}
-                  </div>
-                  <div className="mt-1 text-sm font-bold text-gray-900">
-                    {formatCurrency(day.totalRevenue)}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {formatNumber(day.totalCount)}件
-                  </div>
-                  
-                  {showDetails && (
-                    <div className="mt-1 space-y-0.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">新規:</span>
-                        <span className="font-medium">{formatNumber(day.newCount)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">既存:</span>
-                        <span className="font-medium">{formatNumber(day.existingCount)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">単価:</span>
-                        <span className="font-medium">{formatCurrency(day.dailyAverage)}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {previousDay && (
-                    <div className="flex items-center justify-center mt-1 space-x-1">
-                      {getTrendIcon(day.totalRevenue, previousDay.totalRevenue)}
-                      <span className={`text-xs ${getTrendColor(day.totalRevenue, previousDay.totalRevenue)}`}>
-                        {calculateTrend(day.totalRevenue, previousDay.totalRevenue).toFixed(0)}%
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
       </div>
 
-      {/* 表示指標 */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">表示指標</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {/* 総来院者数 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">総来院者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(dailyData.reduce((sum, day) => sum + day.totalCount, 0))}人
-                </p>
-              </div>
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
-          </div>
-
-          {/* 新規来院者数 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">新規来院者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(dailyData.reduce((sum, day) => sum + day.newCount, 0))}人
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-green-600" />
-            </div>
-          </div>
-
-          {/* 既存来院者数 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">既存来院者数</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(dailyData.reduce((sum, day) => sum + day.existingCount, 0))}人
-                </p>
-              </div>
-              <Calendar className="w-8 h-8 text-purple-600" />
-            </div>
-          </div>
-
-          {/* 平均単価 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">平均単価</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(
-                    dailyData.length > 0 
-                      ? dailyData.reduce((sum, day) => sum + day.dailyAverage, 0) / dailyData.length
-                      : 0
-                  )}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-orange-600" />
-            </div>
-          </div>
-
-          {/* 新規平均単価 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">新規平均単価</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(
-                    dailyData.length > 0 
-                      ? dailyData.reduce((sum, day) => sum + day.newDailyAverage, 0) / dailyData.length
-                      : 0
-                  )}
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-red-600" />
-            </div>
-          </div>
-
-          {/* 既存平均単価 */}
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">既存平均単価</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(
-                    dailyData.length > 0 
-                      ? dailyData.reduce((sum, day) => sum + day.existingDailyAverage, 0) / dailyData.length
-                      : 0
-                  )}
-                </p>
-              </div>
-              <Calendar className="w-8 h-8 text-indigo-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* カテゴリー別分析 */}
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別分析</h3>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* 流入元別分析 */}
-          <div>
-            <h4 className="mb-3 font-semibold text-gray-800 text-md">流入元別分析</h4>
-            <div className="space-y-2">
-              {(() => {
-                const referralSourceData = dailyData.reduce((acc, day) => {
-                  day.newPatients.concat(day.existingPatients).forEach(record => {
-                    const source = record.visitorInflowSourceName || 'その他'
-                    if (!acc[source]) {
-                      acc[source] = { count: 0, revenue: 0 }
-                    }
-                    acc[source].count += 1
-                    acc[source].revenue += record.totalWithTax || 0
-                  })
-                  return acc
-                }, {} as Record<string, { count: number, revenue: number }>)
-
-                return Object.entries(referralSourceData)
-                  .sort(([,a], [,b]) => b.revenue - a.revenue)
-                  .slice(0, 5)
-                  .map(([source, data]) => (
-                    <div key={source} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-                      <div>
-                        <div className="font-medium text-gray-900">{source}</div>
-                        <div className="text-sm text-gray-600">{formatNumber(data.count)}件</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-gray-900">{formatCurrency(data.revenue)}</div>
-                        <div className="text-sm text-gray-600">
-                          単価: {formatCurrency(data.count > 0 ? data.revenue / data.count : 0)}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-              })()}
-            </div>
-          </div>
-
-          {/* 施術別分析 */}
-          <div>
-            <h4 className="mb-3 font-semibold text-gray-800 text-md">施術別分析</h4>
-            <div className="space-y-2">
-              {(() => {
-                const treatmentData = dailyData.reduce((acc, day) => {
-                  day.newPatients.concat(day.existingPatients).forEach(record => {
-                    console.log('Debug - Record:', record)
-                    const treatment = record.treatmentName || 'その他'
-                    if (!acc[treatment]) {
-                      acc[treatment] = { count: 0, revenue: 0 }
-                    }
-                    acc[treatment].count += 1
-                    acc[treatment].revenue += record.totalWithTax || 0
-                  })
-                  return acc
-                }, {} as Record<string, { count: number, revenue: number }>)
-
-                return Object.entries(treatmentData)
-                  .sort(([,a], [,b]) => b.revenue - a.revenue)
-                  .slice(0, 5)
-                  .map(([treatment, data]) => (
-                    <div key={treatment} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-                      <div>
-                        <div className="font-medium text-gray-900">{treatment}</div>
-                        <div className="text-sm text-gray-600">{formatNumber(data.count)}件</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-gray-900">{formatCurrency(data.revenue)}</div>
-                        <div className="text-sm text-gray-600">
-                          単価: {formatCurrency(data.count > 0 ? data.revenue / data.count : 0)}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-              })()}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 選択日の詳細情報 */}
-      {selectedDayData && (
-        <div className="p-6 bg-white rounded-lg shadow">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">
-            {formatDate(new Date(selectedDayData.dateString))} の詳細
-          </h3>
-
-          {/* 基本情報 */}
-          <div className="grid grid-cols-1 gap-4 mb-6 md:grid-cols-4">
-            <div className="p-4 text-center rounded-lg bg-gray-50">
-              <DollarSign className="w-8 h-8 mx-auto mb-2 text-green-600" />
-              <div className="text-2xl font-bold text-gray-900">
-                {formatCurrency(selectedDayData.totalRevenue)}
-              </div>
-              <div className="text-sm text-gray-600">総売上</div>
-            </div>
-
-            <div className="p-4 text-center rounded-lg bg-gray-50">
-              <Users className="w-8 h-8 mx-auto mb-2 text-blue-600" />
-              <div className="text-2xl font-bold text-gray-900">
-                {formatNumber(selectedDayData.totalCount)}
-              </div>
-              <div className="text-sm text-gray-600">総件数</div>
-            </div>
-
-            <div className="p-4 text-center rounded-lg bg-gray-50">
-              <Calendar className="w-8 h-8 mx-auto mb-2 text-purple-600" />
-              <div className="text-2xl font-bold text-gray-900">
-                {formatCurrency(selectedDayData.dailyAverage)}
-              </div>
-              <div className="text-sm text-gray-600">当日単価</div>
-            </div>
-
-            <div className="p-4 text-center rounded-lg bg-gray-50">
-              <TrendingUp className="w-8 h-8 mx-auto mb-2 text-orange-600" />
-              <div className="text-2xl font-bold text-gray-900">
-                {formatCurrency(selectedDayData.newDailyAverage)}
-              </div>
-              <div className="text-sm text-gray-600">新規当日単価</div>
-            </div>
-          </div>
-
-          {/* 患者区分別詳細 */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* 新規患者 */}
-            <div className="p-4 rounded-lg bg-blue-50">
-              <h4 className="mb-3 font-semibold text-blue-900">新規患者</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">件数:</span>
-                  <span className="font-medium text-blue-900">
-                    {formatNumber(selectedDayData.newPatients.length)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">売上:</span>
-                  <span className="font-medium text-blue-900">
-                    {formatCurrency(selectedDayData.newPatients.reduce((sum, p) => sum + (p.totalWithTax || 0), 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">単価:</span>
-                  <span className="font-medium text-blue-900">
-                    {formatCurrency(selectedDayData.newDailyAverage)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">当日単価:</span>
-                  <span className="font-medium text-blue-900">
-                    {formatCurrency(selectedDayData.newDailyAverage)}
+      {/* Entity Blocks - Horizontal Scroll */}
+      <div className="overflow-x-auto">
+        <div className="flex gap-4 min-w-max pb-4">
+          {entityData.map((entity, idx) => (
+            <div key={idx} className="flex-shrink-0 w-80 p-4 bg-white border rounded-lg shadow-sm">
+              {/* Header */}
+              <div className="mb-3">
+                <h3 className="text-base font-semibold text-gray-900">{entity.name}</h3>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-xs text-gray-600">日別売上</span>
+                  <span className="text-xs font-medium text-gray-900">
+                    既存の割合: {Math.round(entity.existingRatio)}%
                   </span>
                 </div>
               </div>
-            </div>
 
-            {/* 既存患者 */}
-            <div className="p-4 rounded-lg bg-green-50">
-              <h4 className="mb-3 font-semibold text-green-900">既存患者</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-green-700">件数:</span>
-                  <span className="font-medium text-green-900">
-                    {formatNumber(selectedDayData.existingPatients.length)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-green-700">売上:</span>
-                  <span className="font-medium text-green-900">
-                    {formatCurrency(selectedDayData.existingPatients.reduce((sum, p) => sum + (p.totalWithTax || 0), 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-green-700">単価:</span>
-                  <span className="font-medium text-green-900">
-                    {formatCurrency(selectedDayData.existingDailyAverage)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* 患者詳細リスト */}
-          {selectedDayData.newPatients.length > 0 && (
-            <div className="mt-6">
-              <h4 className="mb-3 font-semibold text-gray-900">新規患者詳細</h4>
-              
-              {/* Pagination Controls - Top */}
-              <div className="mb-4 space-y-3">
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <span className="font-medium">全{selectedDayData.newPatients.length}件</span>
-                    <span className="text-gray-400">|</span>
-                    <label htmlFor="new-patient-items-per-page" className="whitespace-nowrap">表示件数:</label>
-                    <select
-                      id="new-patient-items-per-page"
-                      value={newPatientItemsPerPage}
-                      onChange={(e) => {
-                        setNewPatientItemsPerPage(Number(e.target.value))
-                        setNewPatientPage(1)
-                      }}
-                      className="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value={10}>10件</option>
-                      <option value={20}>20件</option>
-                      <option value={50}>50件</option>
-                      <option value={100}>100件</option>
-                    </select>
+              {/* Overall Summary */}
+              <div className="mb-3 p-2 bg-gray-50 rounded-md">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">全体</div>
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">目標:</span>
+                    <span className="font-medium">{formatCurrency(entity.target)}</span>
                   </div>
-                  {selectedDayData.newPatients.length > newPatientItemsPerPage && (
-                    <div className="text-sm text-gray-600">
-                      {((newPatientPage - 1) * newPatientItemsPerPage + 1).toLocaleString()} - {Math.min(newPatientPage * newPatientItemsPerPage, selectedDayData.newPatients.length).toLocaleString()} / {selectedDayData.newPatients.length.toLocaleString()} 件
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">実績:</span>
+                    <span className="font-medium">{formatCurrency(entity.totalRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">目標達成額(日):</span>
+                    <span className="font-medium">
+                      {formatCurrency(entity.achievementDaily)}
+                      {entity.achievementDaily >= entity.dailyTarget && (
+                        <span className="ml-1 text-green-600">達成</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Daily Breakdown */}
+              <div className="mb-3">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">
+                  1日 - {daysInMonth}日 / -日
+                </div>
+                <div className="grid grid-cols-6 gap-0.5 text-[10px] max-h-48 overflow-y-auto">
+                  {Array.from({ length: Math.min(30, daysInMonth) }, (_, i) => i + 1).map(day => (
+                    <div key={day} className="p-0.5 text-center border border-gray-200 rounded">
+                      <div className="text-gray-500 text-[9px]">{day}</div>
+                      <div className="font-medium text-gray-900 text-[9px] leading-tight">
+                        {entity.dailySales[day] > 0 
+                          ? (entity.dailySales[day] / 10000).toFixed(0) + '万'
+                          : '-'}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
 
-              <div className="overflow-x-auto border rounded-md shadow-inner">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                        患者名
-                      </th>
-                      <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                        施術内容
-                      </th>
-                      <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                        担当者
-                      </th>
-                      <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                        流入元
-                      </th>
-                      <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                        当日金額
-                      </th>
-                      <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                        総金額
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedDayData.newPatients
-                      .slice((newPatientPage - 1) * newPatientItemsPerPage, newPatientPage * newPatientItemsPerPage)
-                      .map((record, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                          {record.visitorName || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          {record.visitorTreatmentName || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          {record.staff || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          {record.visitorInflowSourceName || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                          {formatCurrency(record.totalWithTax || 0)}
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                          {formatCurrency(record.totalWithTax || 0)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Mid-Month Summary */}
+              <div className="mb-3 p-2 bg-gray-50 rounded-md">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">月後半(16-末日)</div>
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">目標:</span>
+                    <span className="font-medium">{formatCurrency(entity.secondHalfTarget)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">実績:</span>
+                    <span className="font-medium">{formatCurrency(entity.secondHalfRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">目標達成額(日):</span>
+                    <span className="font-medium">
+                      {formatCurrency(entity.secondHalfAchievementDaily)}
+                      {entity.secondHalfAchievementDaily >= (entity.secondHalfTarget / (daysInMonth - 15)) && (
+                        <span className="ml-1 text-green-600">達成</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Pagination - Bottom */}
-              {selectedDayData.newPatients.length > 0 && (
-                <div className="mt-4">
-                  <Pagination
-                    currentPage={newPatientPage}
-                    totalPages={Math.ceil(selectedDayData.newPatients.length / newPatientItemsPerPage)}
-                    onPageChange={setNewPatientPage}
-                    totalItems={selectedDayData.newPatients.length}
-                    itemsPerPage={newPatientItemsPerPage}
-                  />
+              {/* Upsell */}
+              <div className="mb-3 p-2 bg-gray-50 rounded-md">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">アップセル</div>
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">相談件数:</span>
+                    <span className="font-medium">{formatNumber(entity.consultationCount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">アップセル件数:</span>
+                    <span className="font-medium">{formatNumber(entity.upsellCount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">割合:</span>
+                    <span className="font-medium">{Math.round(entity.upsellRatio)}%</span>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Treatment Request Ratio */}
+              <div className="p-2 bg-gray-50 rounded-md">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">処置希望割合</div>
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">相談済み:</span>
+                    <span className="font-medium">
+                      {formatNumber(entity.consultedCount)}/{formatNumber(entity.consultedCount)} ({entity.consultedCount > 0 ? 100 : 0}%)
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">CS次週:</span>
+                    <span className="font-medium">
+                      {formatNumber(entity.csNextWeekCount)}/{formatNumber(entity.consultedCount)} ({entity.consultedCount > 0 ? Math.round((entity.csNextWeekCount / entity.consultedCount) * 100) : 0}%)
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">当日希望:</span>
+                    <span className="font-medium">
+                      {formatNumber(entity.sameDayCount)}/{formatNumber(entity.consultedCount)} ({entity.consultedCount > 0 ? Math.round((entity.sameDayCount / entity.consultedCount) * 100) : 0}%)
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">全体:</span>
+                    <span className="font-medium">
+                      {formatNumber(entity.overallCount)}/{formatNumber(entity.overallCount)} ({entity.overallCount > 0 ? 100 : 0}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+          ))}
         </div>
-      )}
+      </div>
     </div>
   )
 }
