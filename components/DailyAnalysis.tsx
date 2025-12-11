@@ -270,9 +270,6 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
                 <h3 className="text-base font-semibold text-gray-900">{entity.name}</h3>
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-xs text-gray-600">日別売上</span>
-                  <span className="text-xs font-medium text-gray-900">
-                    既存の割合: {Math.round(entity.existingRatio)}%
-                  </span>
                 </div>
               </div>
 
@@ -343,55 +340,6 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
                 </div>
               </div>
 
-              {/* Upsell */}
-              <div className="mb-3 p-2 bg-gray-50 rounded-md">
-                <div className="text-xs font-semibold text-gray-700 mb-1.5">アップセル</div>
-                <div className="space-y-0.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">相談件数:</span>
-                    <span className="font-medium">{formatNumber(entity.consultationCount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">アップセル件数:</span>
-                    <span className="font-medium">{formatNumber(entity.upsellCount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">割合:</span>
-                    <span className="font-medium">{Math.round(entity.upsellRatio)}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Treatment Request Ratio */}
-              <div className="p-2 bg-gray-50 rounded-md">
-                <div className="text-xs font-semibold text-gray-700 mb-1.5">処置希望割合</div>
-                <div className="space-y-0.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">相談済み:</span>
-                    <span className="font-medium">
-                      {formatNumber(entity.consultedCount)}/{formatNumber(entity.consultedCount)} ({entity.consultedCount > 0 ? 100 : 0}%)
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">CS次週:</span>
-                    <span className="font-medium">
-                      {formatNumber(entity.csNextWeekCount)}/{formatNumber(entity.consultedCount)} ({entity.consultedCount > 0 ? Math.round((entity.csNextWeekCount / entity.consultedCount) * 100) : 0}%)
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">当日希望:</span>
-                    <span className="font-medium">
-                      {formatNumber(entity.sameDayCount)}/{formatNumber(entity.consultedCount)} ({entity.consultedCount > 0 ? Math.round((entity.sameDayCount / entity.consultedCount) * 100) : 0}%)
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">全体:</span>
-                    <span className="font-medium">
-                      {formatNumber(entity.overallCount)}/{formatNumber(entity.overallCount)} ({entity.overallCount > 0 ? 100 : 0}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           ))}
         </div>

@@ -14,7 +14,9 @@
         "chart.js": "^4.4.0",
         "clsx": "^2.0.0",
         "date-fns": "^2.30.0",
+        "html2canvas": "^1.4.1",
         "idb": "^7.1.1",
+        "jspdf": "^2.5.1",
         "lucide-react": "^0.294.0",
         "next": "^14.2.15",
         "papaparse": "^5.4.1",
@@ -24,6 +26,7 @@
         "tailwind-merge": "^2.0.0"
     },
     "devDependencies": {
+        "@types/html2canvas": "^1.0.0",
         "@types/node": "^20.0.0",
         "@types/papaparse": "^5.3.0",
         "@types/react": "^18.2.0",

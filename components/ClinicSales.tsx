@@ -24,6 +24,56 @@ type CategoryKey =
   | 'hairRemoval'
   | 'products'
 
+// Hierarchical category structure
+interface CategoryHierarchy {
+  mainCategory: string
+  mainKey: string
+  subcategories: { key: CategoryKey; label: string; categoryIds: string[] }[]
+}
+
+const CATEGORY_HIERARCHY: CategoryHierarchy[] = [
+  {
+    mainCategory: '外科',
+    mainKey: 'surgery',
+    subcategories: [
+      { key: 'doubleEyelid', label: '二重', categoryIds: ['surgery_double_eyelid'] },
+      { key: 'darkCircle', label: 'くま治療', categoryIds: ['surgery_dark_circles'] },
+      { key: 'threadLift', label: '糸リフト', categoryIds: ['surgery_thread_lift'] },
+      { key: 'faceSlimming', label: '小顔（S,BF)', categoryIds: ['surgery_face_slimming'] },
+      { key: 'noseSurgery', label: '鼻・人中手術', categoryIds: ['surgery_nose_philtrum'] },
+      { key: 'bodyLiposuction', label: 'ボディー脂肪吸引', categoryIds: ['surgery_body_liposuction'] },
+      { key: 'breastAugmentation', label: '豊胸', categoryIds: ['surgery_breast_augmentation'] },
+      { key: 'otherSurgery', label: 'その他外科', categoryIds: ['surgery_other'] },
+    ]
+  },
+  {
+    mainCategory: '皮膚科',
+    mainKey: 'dermatology',
+    subcategories: [
+      { key: 'injection', label: '注入', categoryIds: ['dermatology_injection'] },
+      { key: 'skin', label: 'スキン', categoryIds: ['dermatology_skin'] },
+      { key: 'skin', label: 'スキン（インモード/HIFU）', categoryIds: ['dermatology_skin'] }, // Note: Same categoryId, different label
+    ]
+  },
+  {
+    mainCategory: '脱毛',
+    mainKey: 'hairRemoval',
+    subcategories: [
+      { key: 'hairRemoval', label: '脱毛', categoryIds: ['hair_removal'] },
+    ]
+  },
+  {
+    mainCategory: 'その他',
+    mainKey: 'other',
+    subcategories: [
+      { key: 'products', label: 'ピアス', categoryIds: ['other_piercing'] },
+      { key: 'products', label: '物販', categoryIds: ['other_products'] },
+      { key: 'products', label: '麻酔・針・パック', categoryIds: ['other_anesthesia_needle_pack'] },
+    ]
+  }
+]
+
+// Flattened list for backward compatibility
 const CATEGORY_COLUMNS: { key: CategoryKey; label: string; categoryIds: string[] }[] = [
   { key: 'doubleEyelid', label: '二重', categoryIds: ['surgery_double_eyelid'] },
   { key: 'darkCircle', label: 'くま治療', categoryIds: ['surgery_dark_circles'] },
@@ -43,14 +93,14 @@ interface ClinicSalesRow {
   id: string
   staff: string
   clinic: string
-  patientType: string
+  patientType: { main: string; sub?: string }
   visitTreatmentLabel: string
   name: string
   age: string
   reservationContent: string
   procedureWish: string
-  referralSource: string
-  reservationRoute: string
+  referralSource: string // 知ったきっかけ
+  reservationRoute: string // 来院経路
   procedureDetail: string
   categories: Record<CategoryKey, number>
   depositAmount: number
@@ -117,19 +167,36 @@ const buildCategoryTotals = (items: any[] | undefined): Record<CategoryKey, numb
   return totals
 }
 
-const determinePatientType = (record: any) => {
+const determinePatientType = (record: any): { main: string; sub?: string } => {
   const paymentTags = record.paymentTags || ''
   const visitorName = record.visitorName || ''
+  
+  // Check for "その他" category items
   if (
     paymentTags.includes('物販') ||
     paymentTags.includes('ピアス') ||
+    paymentTags.includes('麻酔') ||
+    paymentTags.includes('針') ||
+    paymentTags.includes('パック') ||
     visitorName.includes('物販') ||
     visitorName.includes('ピアス')
   ) {
-    return '物販'
+    // Determine subcategory
+    if (paymentTags.includes('ピアス') || visitorName.includes('ピアス')) {
+      return { main: 'その他', sub: 'ピアス' }
+    }
+    if (paymentTags.includes('物販') || visitorName.includes('物販')) {
+      return { main: 'その他', sub: '物販' }
+    }
+    if (paymentTags.includes('麻酔') || paymentTags.includes('針') || paymentTags.includes('パック')) {
+      return { main: 'その他', sub: '麻酔・針・パック' }
+    }
+    // Default to "その他（ピアス/物販/麻酔・針・パック等）"
+    return { main: 'その他（ピアス/物販/麻酔・針・パック等）' }
   }
-  if (record.isFirst === true || record.isFirstVisit === true) return '新規'
-  return '既存'
+  
+  if (record.isFirst === true || record.isFirstVisit === true) return { main: '新規' }
+  return { main: '既存' }
 }
 
 const getClinicLabel = (record: any) => {
@@ -195,7 +262,7 @@ export default function ClinicSales() {
 
     const now = new Date()
     const months = []
-    for (let i = 11; i >= 0; i--) {
+    for (let i = 0; i <= 11; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
       months.push({
         year: date.getFullYear(),
@@ -203,6 +270,7 @@ export default function ClinicSales() {
         label: `${String(date.getFullYear()).slice(-2)}年${date.getMonth() + 1}月`
       })
     }
+    months.reverse() // Reverse to show newest first
 
     const visitors = new Array(12).fill(0)
     const revenue = new Array(12).fill(0)
@@ -234,7 +302,7 @@ export default function ClinicSales() {
         {
           type: 'line' as const,
           label: '来院数',
-          data: visitors,
+          data: [...visitors].reverse(), // Reverse to match reversed months
           borderColor: '#3B82F6',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
           borderWidth: 2,
@@ -244,7 +312,7 @@ export default function ClinicSales() {
         {
           type: 'line' as const,
           label: '売上',
-          data: revenue,
+          data: [...revenue].reverse(), // Reverse to match reversed months
           borderColor: '#F97316',
           backgroundColor: 'rgba(249, 115, 22, 0.1)',
           borderWidth: 2,
@@ -255,7 +323,7 @@ export default function ClinicSales() {
         {
           type: 'line' as const,
           label: '会計単価',
-          data: unitPrice,
+          data: [...unitPrice].reverse(), // Reverse to match reversed months
           borderColor: '#F59E0B',
           backgroundColor: 'rgba(245, 158, 11, 0.1)',
           borderWidth: 2,
@@ -266,7 +334,7 @@ export default function ClinicSales() {
         {
           type: 'line' as const,
           label: '初診成約率',
-          data: firstVisitConversion,
+          data: [...firstVisitConversion].reverse(), // Reverse to match reversed months
           borderColor: '#F97316',
           backgroundColor: 'rgba(249, 115, 22, 0.1)',
           borderWidth: 2,
@@ -277,7 +345,7 @@ export default function ClinicSales() {
         {
           type: 'line' as const,
           label: 'リピート率',
-          data: repeatRate,
+          data: [...repeatRate].reverse(), // Reverse to match reversed months
           borderColor: '#F59E0B',
           backgroundColor: 'rgba(245, 158, 11, 0.1)',
           borderWidth: 2,
@@ -382,6 +450,8 @@ export default function ClinicSales() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ja'))
   }, [allDailyAccounts])
 
+  const allClinicNames = ['大宮院', '郡山院', '横浜院', '水戸院']
+
   const availableMonths = useMemo(() => {
     const months = new Set<string>()
     allDailyAccounts.forEach(record => {
@@ -395,22 +465,41 @@ export default function ClinicSales() {
       if (!date) return
       months.add(formatMonthValue(date))
     })
-    return Array.from(months).sort().reverse()
+    return Array.from(months).sort().reverse() // Already reversed, newest first
   }, [allDailyAccounts])
 
   const defaultMonthValue = availableMonths[0] || formatMonthValue(new Date())
 
+  // Map dashboard clinic ID to clinic name
+  const getClinicNameFromId = (clinicId: string) => {
+    if (clinicId === 'all') return 'all'
+    const clinicNameMap: Record<string, string> = {
+      'yokohama': '横浜院',
+      'koriyama': '郡山院',
+      'mito': '水戸院',
+      'omiya': '大宮院'
+    }
+    return clinicNameMap[clinicId] || 'all'
+  }
+
   const [tableFilterDraft, setTableFilterDraft] = useState(() => ({
-    clinic: 'all',
+    clinic: getClinicNameFromId(state.selectedClinic),
     month: defaultMonthValue,
     sort: 'treatmentDate'
   }))
 
   const [tableFilters, setTableFilters] = useState(() => ({
-    clinic: 'all',
+    clinic: getClinicNameFromId(state.selectedClinic),
     month: defaultMonthValue,
     sort: 'treatmentDate'
   }))
+
+  // Sync with header clinic selection
+  useEffect(() => {
+    const clinicName = getClinicNameFromId(state.selectedClinic)
+    setTableFilterDraft(prev => ({ ...prev, clinic: clinicName }))
+    setTableFilters(prev => ({ ...prev, clinic: clinicName }))
+  }, [state.selectedClinic])
 
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
@@ -446,6 +535,10 @@ export default function ClinicSales() {
     const [filterYear, filterMonth] = (tableFilters.month || '').split('-').map(num => parseInt(num, 10))
 
     const filteredRecords = allDailyAccounts.filter(record => {
+      if (tableFilters.clinic === 'all-comparison') {
+        // For comparison view, include all clinics
+        return true
+      }
       if (tableFilters.clinic !== 'all' && getClinicLabel(record) !== tableFilters.clinic) {
         return false
       }
@@ -521,8 +614,8 @@ export default function ClinicSales() {
         age: record.visitorAge ? String(record.visitorAge) : '-',
         reservationContent,
         procedureWish,
-        referralSource: record.visitorInflowSourceName || record.visitorInflowSourceLabel || '-',
-        reservationRoute: record.reservationInflowPathLabel || '-',
+        referralSource: record.visitorInflowSourceName || record.visitorInflowSourceLabel || '-', // 知ったきっかけ
+        reservationRoute: record.reservationInflowPathLabel || record.reservationRoute || '-', // 来院経路
         procedureDetail,
         categories,
         depositAmount,
@@ -553,6 +646,36 @@ export default function ClinicSales() {
 
     return sortedRows
   }, [allDailyAccounts, tableFilters])
+
+  // Calculate totals for each main category
+  const categoryTotals = useMemo(() => {
+    const totals: Record<string, { revenue: number; count: number; unitPrice: number }> = {}
+    
+    clinicSalesRows.forEach(row => {
+      CATEGORY_HIERARCHY.forEach(hierarchy => {
+        if (!totals[hierarchy.mainKey]) {
+          totals[hierarchy.mainKey] = { revenue: 0, count: 0, unitPrice: 0 }
+        }
+        
+        hierarchy.subcategories.forEach(sub => {
+          const amount = row.categories[sub.key] || 0
+          if (amount > 0) {
+            totals[hierarchy.mainKey].revenue += amount
+            totals[hierarchy.mainKey].count += 1
+          }
+        })
+      })
+    })
+    
+    // Calculate unit prices
+    Object.keys(totals).forEach(key => {
+      if (totals[key].count > 0) {
+        totals[key].unitPrice = totals[key].revenue / totals[key].count
+      }
+    })
+    
+    return totals
+  }, [clinicSalesRows])
 
   const hasRealData = allDailyAccounts.length > 0
 
@@ -708,7 +831,7 @@ export default function ClinicSales() {
       {/* Bottom: Detailed Clinic Sales Table */}
       <div className="space-y-4">
         <div className="p-6 bg-white border rounded-lg shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">院別売上</h3>
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">スタッフ別売上</h3>
 
           {/* Filter Panel */}
           <div className="p-4 mb-4 border rounded-lg bg-gray-50">
@@ -721,6 +844,7 @@ export default function ClinicSales() {
                   className="px-3 py-2 mt-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">全院</option>
+                  <option value="all-comparison">全院比較</option>
                   {clinicOptions.map(option => (
                     <option key={option} value={option}>{option}</option>
                   ))}
@@ -790,38 +914,223 @@ export default function ClinicSales() {
             </div>
           </div>
 
-          {/* Detailed Table */}
-          <div className="overflow-x-auto border rounded-md shadow-inner">
-            <table className="min-w-[1400px] divide-y divide-gray-200 text-xs">
+          {/* Comparison View - Show clinics side by side */}
+          {tableFilters.clinic === 'all-comparison' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {allClinicNames.map(clinicName => {
+                  const clinicData = clinicSalesRows.filter(row => row.clinic === clinicName)
+                  const totalRevenue = clinicData.reduce((sum, row) => sum + row.totalAmount, 0)
+                  const totalCount = clinicData.length
+                  const avgUnitPrice = totalCount > 0 ? totalRevenue / totalCount : 0
+                  
+                  return (
+                    <div key={clinicName} className="p-4 bg-white border rounded-lg shadow-sm">
+                      <h4 className="mb-3 text-lg font-semibold text-gray-900">{clinicName}</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">売上:</span>
+                          <span className="text-sm font-semibold text-gray-900">{formatCurrency(totalRevenue)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">件数:</span>
+                          <span className="text-sm font-semibold text-gray-900">{totalCount.toLocaleString()}件</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">平均単価:</span>
+                          <span className="text-sm font-semibold text-gray-900">{formatCurrency(avgUnitPrice)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              {/* Detailed comparison table */}
+              <div className="overflow-x-auto border rounded-md shadow-inner">
+                <table className="min-w-[1400px] divide-y divide-gray-200 text-xs">
+                  <thead className="bg-gray-50">
+                    {/* First row: Main headers */}
+                    <tr>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">担当者</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">院</th>
+                      <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-r">新/既/その他</th>
+                      <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-r">来院日/施術日</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">名前</th>
+                      <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-r">年齢</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">予約内容</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">処置希望</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">知ったきっかけ</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">来院経路</th>
+                      <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">処置内容</th>
+                      {/* Main category headers */}
+                      {CATEGORY_HIERARCHY.map((hierarchy, idx) => (
+                        <th 
+                          key={hierarchy.mainKey} 
+                          colSpan={hierarchy.subcategories.length} 
+                          className={`px-3 py-2 text-center text-gray-500 uppercase font-semibold border-x ${idx === 0 ? 'border-l-2' : ''} ${idx === CATEGORY_HIERARCHY.length - 1 ? 'border-r-2' : ''}`}
+                        >
+                          {hierarchy.mainCategory}
+                        </th>
+                      ))}
+                      <th rowSpan={2} className="px-3 py-2 text-right text-gray-500 uppercase border-l">予約金</th>
+                      <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase whitespace-nowrap border-l">後日振込日/予約金</th>
+                      <th rowSpan={2} className="px-3 py-2 text-right text-gray-500 uppercase border-l">合計</th>
+                      <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-l">U/C</th>
+                      <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-l">管理</th>
+                    </tr>
+                    {/* Second row: Subcategory headers */}
+                    <tr>
+                      {CATEGORY_HIERARCHY.map((hierarchy) => (
+                        hierarchy.subcategories.map((sub, subIdx) => (
+                          <th 
+                            key={`${hierarchy.mainKey}-${sub.key}-${subIdx}`}
+                            className="px-2 py-1 text-xs text-right text-gray-500 uppercase border-x"
+                          >
+                            {sub.label}
+                          </th>
+                        ))
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {clinicSalesRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={11 + CATEGORY_HIERARCHY.reduce((sum, h) => sum + h.subcategories.length, 0) + 5} className="px-6 py-10 text-sm text-center text-gray-500">
+                          データがありません。フィルター条件を変更してください。
+                        </td>
+                      </tr>
+                    ) : (
+                      clinicSalesRows
+                        .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                        .map(row => (
+                        <tr key={row.id} className={row.hasDeposit ? 'bg-green-50/70' : 'hover:bg-gray-50'}>
+                          <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.staff}</td>
+                          <td className="px-3 py-2 text-gray-900">{row.clinic}</td>
+                          <td className="px-3 py-2 text-center text-gray-900">
+                            {row.patientType.sub ? `${row.patientType.main}（${row.patientType.sub}）` : row.patientType.main}
+                          </td>
+                          <td className="px-3 py-2 text-center text-gray-700 whitespace-nowrap">{row.visitTreatmentLabel}</td>
+                          <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{row.name}</td>
+                          <td className="px-3 py-2 text-center text-gray-900">{row.age}</td>
+                          <td
+                            className="px-3 py-2 text-gray-700 cursor-help w-36 whitespace-nowrap"
+                            title={row.reservationContent || '-'}
+                          >
+                            {truncateText(row.reservationContent)}
+                          </td>
+                          <td
+                            className="px-3 py-2 text-gray-700 cursor-help w-36 whitespace-nowrap"
+                            title={row.procedureWish || '-'}
+                          >
+                            {truncateText(row.procedureWish)}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{row.referralSource}</td>
+                          <td className="px-3 py-2 text-gray-700">{row.reservationRoute}</td>
+                          <td
+                            className="px-3 py-2 text-gray-700 cursor-help w-36 whitespace-nowrap"
+                            title={row.procedureDetail || '-'}
+                          >
+                            {truncateText(row.procedureDetail)}
+                          </td>
+                          {CATEGORY_HIERARCHY.map((hierarchy) => (
+                            hierarchy.subcategories.map((sub, subIdx) => {
+                              // For "スキン（インモード/HIFU）", check if it's the second skin entry
+                              const isSkinInmode = sub.label === 'スキン（インモード/HIFU）'
+                              const categoryValue = isSkinInmode ? 0 : (row.categories[sub.key] || 0)
+                              return (
+                                <td 
+                                  key={`${row.id}-${hierarchy.mainKey}-${sub.key}-${subIdx}`} 
+                                  className="px-2 py-2 text-right text-gray-900 whitespace-nowrap border-x"
+                                >
+                                  {categoryValue > 0 ? formatCurrency(categoryValue) : '-'}
+                                </td>
+                              )
+                            })
+                          ))}
+                          <td className="px-3 py-2 text-right text-gray-900">
+                            {row.depositAmount > 0 ? formatCurrency(row.depositAmount) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-center text-gray-900 whitespace-nowrap">
+                            {row.scheduledPaymentLabel}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-900">
+                            {row.totalAmount > 0 ? formatCurrency(row.totalAmount) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-center text-gray-900">{row.balanceStatus}</td>
+                          <td className="px-3 py-2 text-center">
+                            {row.detailUrl ? (
+                              <a
+                                href={row.detailUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center w-20 px-3 py-1 text-xs font-medium text-blue-600 border border-blue-200 rounded hover:bg-blue-50"
+                              >
+                                詳細
+                              </a>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* Regular Table View */
+            <div className="overflow-x-auto border rounded-md shadow-inner">
+              <table className="min-w-[1400px] divide-y divide-gray-200 text-xs">
               <thead className="bg-gray-50">
+                {/* First row: Main headers */}
                 <tr>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">担当者</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">院</th>
-                  <th className="px-3 py-2 text-center text-gray-500 uppercase">新/既/物</th>
-                  <th className="px-3 py-2 text-center text-gray-500 uppercase">来院日/施術日</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">名前</th>
-                  <th className="px-3 py-2 text-center text-gray-500 uppercase">年齢</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">予約内容</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">処置希望</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">知ったきっかけ</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">予約経路</th>
-                  <th className="px-3 py-2 text-left text-gray-500 uppercase">処置内容</th>
-                  {CATEGORY_COLUMNS.map(column => (
-                    <th key={column.key} className="px-3 py-2 text-right text-gray-500 uppercase whitespace-nowrap">
-                      {column.label}
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">担当者</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">院</th>
+                  <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-r">新/既/その他</th>
+                  <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-r">来院日/施術日</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">名前</th>
+                  <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-r">年齢</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">予約内容</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">処置希望</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">知ったきっかけ</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">予約経路</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-gray-500 uppercase border-r">処置内容</th>
+                  {/* Main category headers */}
+                  {CATEGORY_HIERARCHY.map((hierarchy, idx) => (
+                    <th 
+                      key={hierarchy.mainKey} 
+                      colSpan={hierarchy.subcategories.length} 
+                      className={`px-3 py-2 text-center text-gray-500 uppercase font-semibold border-x ${idx === 0 ? 'border-l-2' : ''} ${idx === CATEGORY_HIERARCHY.length - 1 ? 'border-r-2' : ''}`}
+                    >
+                      {hierarchy.mainCategory}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right text-gray-500 uppercase">予約金</th>
-                  <th className="px-3 py-2 text-center text-gray-500 uppercase whitespace-nowrap">後日振込日/予約金</th>
-                  <th className="px-3 py-2 text-right text-gray-500 uppercase">合計</th>
-                  <th className="px-3 py-2 text-center text-gray-500 uppercase">U/C</th>
-                  <th className="px-3 py-2 text-center text-gray-500 uppercase">管理</th>
+                  <th rowSpan={2} className="px-3 py-2 text-right text-gray-500 uppercase border-l">予約金</th>
+                  <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase whitespace-nowrap border-l">後日振込日/予約金</th>
+                  <th rowSpan={2} className="px-3 py-2 text-right text-gray-500 uppercase border-l">合計</th>
+                  <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-l">U/C</th>
+                  <th rowSpan={2} className="px-3 py-2 text-center text-gray-500 uppercase border-l">管理</th>
+                </tr>
+                {/* Second row: Subcategory headers */}
+                <tr>
+                  {CATEGORY_HIERARCHY.map((hierarchy) => (
+                    hierarchy.subcategories.map((sub, subIdx) => (
+                      <th 
+                        key={`${hierarchy.mainKey}-${sub.key}-${subIdx}`}
+                        className="px-2 py-1 text-xs text-right text-gray-500 uppercase border-x"
+                      >
+                        {sub.label}
+                      </th>
+                    ))
+                  ))}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {clinicSalesRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11 + CATEGORY_COLUMNS.length + 5} className="px-6 py-10 text-sm text-center text-gray-500">
+                    <td colSpan={11 + CATEGORY_HIERARCHY.reduce((sum, h) => sum + h.subcategories.length, 0) + 5} className="px-6 py-10 text-sm text-center text-gray-500">
                       データがありません。フィルター条件を変更してください。
                     </td>
                   </tr>
@@ -832,7 +1141,9 @@ export default function ClinicSales() {
                     <tr key={row.id} className={row.hasDeposit ? 'bg-green-50/70' : 'hover:bg-gray-50'}>
                       <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.staff}</td>
                       <td className="px-3 py-2 text-gray-900">{row.clinic}</td>
-                      <td className="px-3 py-2 text-center text-gray-900">{row.patientType}</td>
+                      <td className="px-3 py-2 text-center text-gray-900">
+                        {row.patientType.sub ? `${row.patientType.main}（${row.patientType.sub}）` : row.patientType.main}
+                      </td>
                       <td className="px-3 py-2 text-center text-gray-700 whitespace-nowrap">{row.visitTreatmentLabel}</td>
                       <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{row.name}</td>
                       <td className="px-3 py-2 text-center text-gray-900">{row.age}</td>
@@ -856,10 +1167,20 @@ export default function ClinicSales() {
                       >
                         {truncateText(row.procedureDetail)}
                       </td>
-                      {CATEGORY_COLUMNS.map(column => (
-                        <td key={`${row.id}-${column.key}`} className="px-3 py-2 text-right text-gray-900 whitespace-nowrap">
-                          {row.categories[column.key] > 0 ? formatCurrency(row.categories[column.key]) : '-'}
-                        </td>
+                      {CATEGORY_HIERARCHY.map((hierarchy) => (
+                        hierarchy.subcategories.map((sub, subIdx) => {
+                          // For "スキン（インモード/HIFU）", check if it's the second skin entry
+                          const isSkinInmode = sub.label === 'スキン（インモード/HIFU）'
+                          const categoryValue = isSkinInmode ? 0 : (row.categories[sub.key] || 0)
+                          return (
+                            <td 
+                              key={`${row.id}-${hierarchy.mainKey}-${sub.key}-${subIdx}`} 
+                              className="px-2 py-2 text-right text-gray-900 whitespace-nowrap border-x"
+                            >
+                              {categoryValue > 0 ? formatCurrency(categoryValue) : '-'}
+                            </td>
+                          )
+                        })
                       ))}
                       <td className="px-3 py-2 text-right text-gray-900">
                         {row.depositAmount > 0 ? formatCurrency(row.depositAmount) : '-'}
@@ -888,9 +1209,54 @@ export default function ClinicSales() {
                     </tr>
                   ))
                 )}
+                {/* Summary rows for each main category */}
+                {clinicSalesRows.length > 0 && (
+                  <>
+                    {CATEGORY_HIERARCHY.map((hierarchy, hierarchyIdx) => {
+                      const total = categoryTotals[hierarchy.mainKey] || { revenue: 0, count: 0, unitPrice: 0 }
+                      return (
+                        <tr key={`summary-${hierarchy.mainKey}`} className="bg-blue-50 font-semibold">
+                          <td colSpan={11} className="px-3 py-2 text-left text-gray-900 border-r">
+                            {hierarchy.mainCategory} 合計
+                          </td>
+                          {CATEGORY_HIERARCHY.map((h, hIdx) => {
+                            if (hIdx === hierarchyIdx) {
+                              return h.subcategories.map((sub, subIdx) => {
+                                const subTotal = clinicSalesRows.reduce((sum, row) => {
+                                  return sum + (row.categories[sub.key] || 0)
+                                }, 0)
+                                return (
+                                  <td 
+                                    key={`summary-${h.mainKey}-${sub.key}-${subIdx}`}
+                                    className="px-2 py-2 text-right text-gray-900 whitespace-nowrap border-x"
+                                  >
+                                    {subTotal > 0 ? formatCurrency(subTotal) : '-'}
+                                  </td>
+                                )
+                              })
+                            } else {
+                              return h.subcategories.map((sub, subIdx) => (
+                                <td 
+                                  key={`summary-empty-${h.mainKey}-${sub.key}-${subIdx}`}
+                                  className="px-2 py-2 border-x"
+                                ></td>
+                              ))
+                            }
+                          })}
+                          <td colSpan={5} className="px-3 py-2 text-right text-gray-900 border-l">
+                            <div>売上: {formatCurrency(total.revenue)}</div>
+                            <div className="text-xs text-gray-600">件数: {total.count}件</div>
+                            <div className="text-xs text-gray-600">単価: {formatCurrency(total.unitPrice)}</div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </>
+                )}
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Pagination - Bottom */}
           {clinicSalesRows.length > 0 && (

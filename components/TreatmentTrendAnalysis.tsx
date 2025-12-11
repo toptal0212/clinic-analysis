@@ -311,7 +311,7 @@ export default function TreatmentTrendAnalysis() {
               </span>
             </div>
             <div className="p-2 rounded bg-gray-50">
-              <div className="flex items-end h-16 space-x-1">
+              <div className="flex items-end space-x-1">
                 {treatmentTrends.map((trend, i) => {
                   const maxValue = Math.max(...treatmentTrends.map(t => t.accounts))
                   const height = maxValue > 0 ? (trend.accounts / maxValue) * 100 : 0
@@ -351,7 +351,7 @@ export default function TreatmentTrendAnalysis() {
               </span>
             </div>
             <div className="p-2 rounded bg-gray-50">
-              <div className="flex items-end h-16 space-x-1">
+              <div className="flex items-end space-x-1">
                 {treatmentTrends.map((trend, i) => {
                   const maxValue = Math.max(...treatmentTrends.map(t => t.firstVisitPatients))
                   const height = maxValue > 0 ? (trend.firstVisitPatients / maxValue) * 100 : 0
@@ -391,7 +391,7 @@ export default function TreatmentTrendAnalysis() {
               </span>
             </div>
             <div className="p-2 rounded bg-gray-50">
-              <div className="flex items-end h-16 space-x-1">
+              <div className="flex items-end space-x-1">
                 {treatmentTrends.map((trend, i) => {
                   const maxValue = Math.max(...treatmentTrends.map(t => t.repeatRate))
                   const height = maxValue > 0 ? (trend.repeatRate / maxValue) * 100 : 0
@@ -431,7 +431,7 @@ export default function TreatmentTrendAnalysis() {
               </span>
             </div>
             <div className="p-2 rounded bg-gray-50">
-              <div className="flex items-end h-16 space-x-1">
+              <div className="flex items-end space-x-1">
                 {treatmentTrends.map((trend, i) => {
                   const maxValue = Math.max(...treatmentTrends.map(t => t.unitPrice))
                   const height = maxValue > 0 ? (trend.unitPrice / maxValue) * 100 : 0

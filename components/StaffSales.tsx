@@ -55,15 +55,15 @@ export default function StaffSales() {
   const [patientTypeSortField, setPatientTypeSortField] = useState<string>('total')
   const [patientTypeSortDirection, setPatientTypeSortDirection] = useState<'asc' | 'desc'>('desc')
 
-  // last 12 months labels (YYYY/MM)
+  // last 12 months labels (YYYY/MM) - newest first
   const months = useMemo(() => {
     const now = new Date()
     const arr: { y:number,m:number,label:string }[] = []
-    for (let i = 11; i >= 0; i--) {
+    for (let i = 0; i <= 11; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       arr.push({ y: d.getFullYear(), m: d.getMonth()+1, label: `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}` })
     }
-    return arr
+    return arr.reverse() // Reverse to show newest first
   }, [])
 
   const monthlyLines = useMemo(() => {
@@ -87,8 +87,8 @@ export default function StaffSales() {
     return {
       labels: months.map(x=>x.label),
       datasets: [
-        { type:'line' as const, label:'売上', data: totals, borderColor:'#3B82F6', backgroundColor:'#93C5FD', tension:0.2, pointRadius:2 },
-        { type:'line' as const, label:'来院数', data: visitors, borderColor:'#F59E0B', backgroundColor:'#FDE68A', tension:0.2, pointRadius:2, yAxisID:'y1' }
+        { type:'line' as const, label:'売上', data: [...totals].reverse(), borderColor:'#3B82F6', backgroundColor:'#93C5FD', tension:0.2, pointRadius:2 },
+        { type:'line' as const, label:'来院数', data: [...visitors].reverse(), borderColor:'#F59E0B', backgroundColor:'#FDE68A', tension:0.2, pointRadius:2, yAxisID:'y1' }
       ]
     }
   }, [all, months])
@@ -115,40 +115,93 @@ export default function StaffSales() {
   }
 
   function buildStaffTable(mode: 'doctor' | 'counselor') {
-    const map = new Map<string, { revenue: number[], count: number[] }>() // name -> monthly data
+    const map = new Map<string, { revenue: number[], count: number[], sameDayRevenue: number[], sameDayCount: number[], consultationCount: number[], records: any[] }>() // name -> monthly data
     all.forEach(r => {
       const d = toDate(r.recordDate || r.visitDate || r.treatmentDate || r.accountingDate)
       if (!d) return
       const idx = months.findIndex(x => x.y === d.getFullYear() && x.m === d.getMonth()+1)
       if (idx < 0) return
+      
+      // Check if same day (recordDate === treatmentDate)
+      const recordDate = toDate(r.recordDate || r.visitDate)
+      const treatmentDate = toDate(r.treatmentDate || r.confirmedAt)
+      const isSameDay = recordDate && treatmentDate && 
+        recordDate.toISOString().split('T')[0] === treatmentDate.toISOString().split('T')[0]
+      
+      // Get staff name for this record
+      let staffName = ''
+      if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+        // Use the first payment item's staff name
+        staffName = mode === 'doctor' 
+          ? getDoctorNameFromItem(r.paymentItems[0], r) 
+          : getCounselorNameFromItem(r.paymentItems[0], r)
+      } else {
+        staffName = mode === 'doctor'
+          ? (r.doctorName || r.staffName || 'その他')
+          : (r.counselorName || r.advisorName || r.reservationStaffName || 'その他')
+      }
+      
+      if (!map.has(staffName)) {
+        map.set(staffName, { 
+          revenue: new Array(12).fill(0), 
+          count: new Array(12).fill(0),
+          sameDayRevenue: new Array(12).fill(0),
+          sameDayCount: new Array(12).fill(0),
+          consultationCount: new Array(12).fill(0),
+          records: []
+        })
+      }
+      const data = map.get(staffName)!
+      
+      // Consultation count: count each record once
+      data.consultationCount[idx] += 1
+      if (!data.records.find(rec => rec.visitorId === r.visitorId && rec.recordDate === r.recordDate)) {
+        data.records.push(r)
+      }
+      
+      // Process payment items for revenue and account count
       if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
         r.paymentItems.forEach((it: any) => {
-          const name = mode === 'doctor' ? getDoctorNameFromItem(it, r) : getCounselorNameFromItem(it, r)
-          if (!map.has(name)) map.set(name, { revenue: new Array(12).fill(0), count: new Array(12).fill(0) })
-          const data = map.get(name)!
-          data.revenue[idx] += it.priceWithTax || 0
-          data.count[idx] += 1
+          const amount = it.priceWithTax || 0
+          data.revenue[idx] += amount
+          data.count[idx] += 1 // Account count
+          if (isSameDay) {
+            data.sameDayRevenue[idx] += amount
+            data.sameDayCount[idx] += 1
+          }
         })
       } else {
-        const name = mode === 'doctor'
-          ? (r.doctorName || r.staffName || 'その他')
-          : (r.counselorName || r.advisorName || 'その他')
-        if (!map.has(name)) map.set(name, { revenue: new Array(12).fill(0), count: new Array(12).fill(0) })
-        const data = map.get(name)!
-        data.revenue[idx] += r.totalWithTax || 0
-        data.count[idx] += 1
+        const amount = r.totalWithTax || 0
+        data.revenue[idx] += amount
+        data.count[idx] += 1 // Account count
+        if (isSameDay) {
+          data.sameDayRevenue[idx] += amount
+          data.sameDayCount[idx] += 1
+        }
       }
     })
     const rows = Array.from(map.entries()).map(([name, data]) => {
       const totalRevenue = data.revenue.reduce((a, b) => a + b, 0)
       const totalCount = data.count.reduce((a, b) => a + b, 0)
+      const totalSameDayRevenue = data.sameDayRevenue.reduce((a, b) => a + b, 0)
+      const totalSameDayCount = data.sameDayCount.reduce((a, b) => a + b, 0)
+      const totalConsultationCount = data.consultationCount.reduce((a, b) => a + b, 0)
       return { 
         name, 
-        revenue: data.revenue,
-        count: data.count,
+        revenue: [...data.revenue].reverse(), // Reverse to match reversed months
+        count: [...data.count].reverse(), // Reverse to match reversed months
+        sameDayRevenue: [...data.sameDayRevenue].reverse(),
+        sameDayCount: [...data.sameDayCount].reverse(),
+        consultationCount: [...data.consultationCount].reverse(),
+        records: data.records,
         totalRevenue,
         totalCount,
-        totalUnitPrice: totalCount > 0 ? totalRevenue / totalCount : 0
+        totalSameDayRevenue,
+        totalSameDayCount,
+        totalConsultationCount,
+        totalUnitPrice: totalCount > 0 ? totalRevenue / totalCount : 0,
+        totalSameDayUnitPrice: totalSameDayCount > 0 ? totalSameDayRevenue / totalSameDayCount : 0,
+        consultationUnitPrice: totalConsultationCount > 0 ? totalRevenue / totalConsultationCount : 0
       }
     })
     rows.sort((a, b) => b.totalRevenue - a.totalRevenue)
@@ -183,8 +236,8 @@ export default function StaffSales() {
       const totalCount = data.count.reduce((a, b) => a + b, 0)
       return { 
         clinic: c, 
-        revenue: data.revenue,
-        count: data.count,
+        revenue: [...data.revenue].reverse(), // Reverse to match reversed months
+        count: [...data.count].reverse(), // Reverse to match reversed months
         totalRevenue,
         totalCount,
         totalUnitPrice: totalCount > 0 ? totalRevenue / totalCount : 0
@@ -219,7 +272,7 @@ export default function StaffSales() {
     return sorted
   }, [clinicRows, clinicSortField, clinicSortDirection])
 
-  // Sort doctor rows
+  // Sort doctor rows - Updated for new structure
   const sortedDoctorRows = useMemo(() => {
     const sorted = [...doctorRows]
     sorted.sort((a, b) => {
@@ -228,10 +281,30 @@ export default function StaffSales() {
           ? a.name.localeCompare(b.name, 'ja')
           : b.name.localeCompare(a.name, 'ja')
       }
-      if (doctorSortField === 'total') {
+      if (doctorSortField === 'total' || doctorSortField === 'sales') {
         return doctorSortDirection === 'asc' 
           ? a.totalRevenue - b.totalRevenue
           : b.totalRevenue - a.totalRevenue
+      }
+      if (doctorSortField === 'consultation') {
+        return doctorSortDirection === 'asc' 
+          ? a.totalConsultationCount - b.totalConsultationCount
+          : b.totalConsultationCount - a.totalConsultationCount
+      }
+      if (doctorSortField === 'accounts') {
+        return doctorSortDirection === 'asc' 
+          ? a.totalCount - b.totalCount
+          : b.totalCount - a.totalCount
+      }
+      if (doctorSortField === 'consultationUnitPrice') {
+        return doctorSortDirection === 'asc' 
+          ? a.consultationUnitPrice - b.consultationUnitPrice
+          : b.consultationUnitPrice - a.consultationUnitPrice
+      }
+      if (doctorSortField === 'accountUnitPrice') {
+        return doctorSortDirection === 'asc' 
+          ? a.totalUnitPrice - b.totalUnitPrice
+          : b.totalUnitPrice - a.totalUnitPrice
       }
       // Sort by specific month (revenue)
       const monthIndex = parseInt(doctorSortField)
@@ -245,7 +318,7 @@ export default function StaffSales() {
     return sorted
   }, [doctorRows, doctorSortField, doctorSortDirection])
 
-  // Sort counselor rows
+  // Sort counselor rows - Updated for new structure
   const sortedCounselorRows = useMemo(() => {
     const sorted = [...counselorRows]
     sorted.sort((a, b) => {
@@ -258,6 +331,31 @@ export default function StaffSales() {
         return counselorSortDirection === 'asc' 
           ? a.totalRevenue - b.totalRevenue
           : b.totalRevenue - a.totalRevenue
+      }
+      if (counselorSortField === 'sales') {
+        return counselorSortDirection === 'asc' 
+          ? a.totalRevenue - b.totalRevenue
+          : b.totalRevenue - a.totalRevenue
+      }
+      if (counselorSortField === 'consultation') {
+        return counselorSortDirection === 'asc' 
+          ? a.totalConsultationCount - b.totalConsultationCount
+          : b.totalConsultationCount - a.totalConsultationCount
+      }
+      if (counselorSortField === 'accounts') {
+        return counselorSortDirection === 'asc' 
+          ? a.totalCount - b.totalCount
+          : b.totalCount - a.totalCount
+      }
+      if (counselorSortField === 'consultationUnitPrice') {
+        return counselorSortDirection === 'asc' 
+          ? a.consultationUnitPrice - b.consultationUnitPrice
+          : b.consultationUnitPrice - a.consultationUnitPrice
+      }
+      if (counselorSortField === 'accountUnitPrice') {
+        return counselorSortDirection === 'asc' 
+          ? a.totalUnitPrice - b.totalUnitPrice
+          : b.totalUnitPrice - a.totalUnitPrice
       }
       // Sort by specific month (revenue)
       const monthIndex = parseInt(counselorSortField)
@@ -306,8 +404,8 @@ export default function StaffSales() {
     })
     return Array.from(treatmentMap.entries()).map(([treatment, { arr, ucArr }]) => ({
       treatment,
-      arr,
-      ucArr,
+      arr: [...arr].reverse(), // Reverse to match reversed months
+      ucArr: [...ucArr].reverse(), // Reverse to match reversed months
       total: arr.reduce((a, b) => a + b, 0),
       ucCount: ucArr.reduce((a, b) => a + b, 0)
     }))
@@ -383,8 +481,8 @@ export default function StaffSales() {
       const totalCount = data.count.reduce((a, b) => a + b, 0)
       return {
         type,
-        revenue: data.revenue,
-        count: data.count,
+        revenue: [...data.revenue].reverse(), // Reverse to match reversed months
+        count: [...data.count].reverse(), // Reverse to match reversed months
         totalRevenue,
         totalCount,
         totalUnitPrice: totalCount > 0 ? totalRevenue / totalCount : 0
@@ -439,8 +537,8 @@ export default function StaffSales() {
     })
     return Array.from(routeMap.entries()).map(([route, { arr, ucArr }]) => ({
       route,
-      arr,
-      ucArr,
+      arr: [...arr].reverse(), // Reverse to match reversed months
+      ucArr: [...ucArr].reverse(), // Reverse to match reversed months
       total: arr.reduce((a, b) => a + b, 0),
       ucCount: ucArr.reduce((a, b) => a + b, 0)
     }))
@@ -475,6 +573,19 @@ export default function StaffSales() {
   const getSortIcon = (field: string, currentField: string, direction: 'asc' | 'desc') => {
     if (currentField !== field) return '↕️'
     return direction === 'asc' ? '↑' : '↓'
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('ja-JP', {
+      style: 'currency',
+      currency: 'JPY',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount)
+  }
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('ja-JP').format(num)
   }
 
   const handleClinicSort = (field: string) => {
@@ -558,7 +669,7 @@ export default function StaffSales() {
           </div>
         </div>
         <div className="p-4 bg-white border rounded-lg shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">院別売上</h3>
+          <h3 className="mb-3 text-sm font-semibold text-gray-900">スタッフ別売上</h3>
           <div className="mt-4 mb-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -668,7 +779,7 @@ export default function StaffSales() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Doctor table */}
+        {/* Doctor table - Updated structure */}
         <div className="p-4 bg-white border rounded-lg shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">ドクター別売上</h3>
           <div className="mt-4 mb-4 space-y-3">
@@ -700,72 +811,72 @@ export default function StaffSales() {
               )}
             </div>
           </div>
-          <div className="relative">
-            <div className="overflow-x-auto overflow-y-visible max-h-[500px] border rounded-md shadow-inner">
-              <table className="min-w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-gray-50">
-                  <tr>
-                    <th 
-                      rowSpan={2}
-                      className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
-                      onClick={() => handleDoctorSort('name')}
-                    >
-                      担当者 {getSortIcon('name', doctorSortField, doctorSortDirection)}
-                    </th>
-                    {months.map((m, idx)=>(<th 
-                      key={m.label}
-                      colSpan={3}
-                      className="px-3 py-2 text-center cursor-pointer hover:bg-gray-100 whitespace-nowrap border-x"
-                      onClick={() => handleDoctorSort(String(idx))}
-                    >
-                      {m.label} {getSortIcon(String(idx), doctorSortField, doctorSortDirection)}
-                    </th>))}
-                    <th 
-                      rowSpan={2}
-                      className="sticky right-0 z-20 px-3 py-2 text-right border-l cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
-                      onClick={() => handleDoctorSort('total')}
-                    >
-                      計 {getSortIcon('total', doctorSortField, doctorSortDirection)}
-                    </th>
+          {/* Summary table with sortable columns */}
+          <div className="mb-4 overflow-x-auto border rounded-md shadow-inner">
+            <table className="min-w-full text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th 
+                    className="px-3 py-2 text-left cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleDoctorSort('name')}
+                  >
+                    医師名 {getSortIcon('name', doctorSortField, doctorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleDoctorSort('sales')}
+                  >
+                    売り上げ {getSortIcon('sales', doctorSortField, doctorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleDoctorSort('consultation')}
+                  >
+                    相談数 {getSortIcon('consultation', doctorSortField, doctorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleDoctorSort('accounts')}
+                  >
+                    会計数 {getSortIcon('accounts', doctorSortField, doctorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleDoctorSort('consultationUnitPrice')}
+                  >
+                    相談単価 {getSortIcon('consultationUnitPrice', doctorSortField, doctorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleDoctorSort('accountUnitPrice')}
+                  >
+                    会計単価 {getSortIcon('accountUnitPrice', doctorSortField, doctorSortDirection)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {(sortedDoctorRows.length > doctorItemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*doctorItemsPerPage, doctorPage*doctorItemsPerPage) : sortedDoctorRows).map((row,i)=> (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-900">{row.name}</td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {Math.round(row.totalRevenue).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {row.totalConsultationCount.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {row.totalCount.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {Math.round(row.consultationUnitPrice).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {Math.round(row.totalUnitPrice).toLocaleString()}
+                    </td>
                   </tr>
-                  <tr>
-                    {months.map((m, idx)=>(<React.Fragment key={`sub-${m.label}`}>
-                      <th className="px-2 py-1 text-xs text-right border-x">売上</th>
-                      <th className="px-2 py-1 text-xs text-right border-x">件数</th>
-                      <th className="px-2 py-1 text-xs text-right border-x">当月単価</th>
-                    </React.Fragment>))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(sortedDoctorRows.length > doctorItemsPerPage ? sortedDoctorRows.slice((doctorPage-1)*doctorItemsPerPage, doctorPage*doctorItemsPerPage) : sortedDoctorRows).map((row,i)=> (
-                    <tr key={i} className="border-t hover:bg-gray-50">
-                      <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.name}</td>
-                      {row.revenue.map((revenue, j) => {
-                        const count = row.count[j]
-                        const unitPrice = count > 0 ? revenue / count : 0
-                        return (
-                          <React.Fragment key={j}>
-                            <td className="px-2 py-2 text-right border-x">{Math.round(revenue).toLocaleString()}</td>
-                            <td className="px-2 py-2 text-right border-x">{count.toLocaleString()}</td>
-                            <td className="px-2 py-2 text-right border-x">{Math.round(unitPrice).toLocaleString()}</td>
-                          </React.Fragment>
-                        )
-                      })}
-                      <td className="sticky right-0 z-10 px-3 py-2 font-semibold text-right bg-white border-l">
-                        <div>{Math.round(row.totalRevenue).toLocaleString()}</div>
-                        <div className="text-xs text-gray-500">{row.totalCount.toLocaleString()}</div>
-                        <div className="text-xs text-gray-500">{Math.round(row.totalUnitPrice).toLocaleString()}</div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-center gap-2 mt-2 text-xs text-center text-gray-500">
-              <span>←</span>
-              <span>横にスクロールして全期間を表示</span>
-              <span>→</span>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
           <div className="mt-4">
             <Pagination
@@ -778,9 +889,9 @@ export default function StaffSales() {
           </div>
         </div>
 
-        {/* Counselor table */}
+        {/* Counselor table - Updated structure */}
         <div className="p-4 bg-white border rounded-lg shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">カウンセラー別売上</h3>
+          <h3 className="mb-3 text-sm font-semibold text-gray-900">スタッフ（主担当）売り上げ一覧</h3>
           <div className="mt-4 mb-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -810,6 +921,81 @@ export default function StaffSales() {
               )}
             </div>
           </div>
+          {/* Summary table with sortable columns */}
+          <div className="mb-4 overflow-x-auto border rounded-md shadow-inner">
+            <table className="min-w-full text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th 
+                    className="px-3 py-2 text-left cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCounselorSort('name')}
+                  >
+                    スタッフ名 {getSortIcon('name', counselorSortField, counselorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCounselorSort('sales')}
+                  >
+                    売り上げ {getSortIcon('sales', counselorSortField, counselorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCounselorSort('consultation')}
+                  >
+                    相談数 {getSortIcon('consultation', counselorSortField, counselorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCounselorSort('accounts')}
+                  >
+                    会計数 {getSortIcon('accounts', counselorSortField, counselorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCounselorSort('consultationUnitPrice')}
+                  >
+                    相談単価 {getSortIcon('consultationUnitPrice', counselorSortField, counselorSortDirection)}
+                  </th>
+                  <th 
+                    className="px-3 py-2 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCounselorSort('accountUnitPrice')}
+                  >
+                    会計単価 {getSortIcon('accountUnitPrice', counselorSortField, counselorSortDirection)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {(sortedCounselorRows.length > counselorItemsPerPage
+                  ? sortedCounselorRows.slice(
+                      (counselorPage - 1) * counselorItemsPerPage,
+                      counselorPage * counselorItemsPerPage
+                    )
+                  : sortedCounselorRows
+                ).map((row, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-900">{row.name}</td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {formatCurrency(row.totalRevenue)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {formatNumber(row.totalConsultationCount)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {formatNumber(row.totalCount)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {formatCurrency(row.consultationUnitPrice)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {formatCurrency(row.totalUnitPrice)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Detailed monthly breakdown table */}
           <div className="relative">
             <div className="overflow-x-auto overflow-y-visible max-h-[500px] border rounded-md shadow-inner">
               <table className="min-w-full text-xs">
@@ -820,11 +1006,11 @@ export default function StaffSales() {
                       className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
                       onClick={() => handleCounselorSort('name')}
                     >
-                      担当者 {getSortIcon('name', counselorSortField, counselorSortDirection)}
+                      スタッフ名 {getSortIcon('name', counselorSortField, counselorSortDirection)}
                     </th>
                     {months.map((m, idx)=>(<th 
                       key={m.label}
-                      colSpan={3}
+                      colSpan={4}
                       className="px-3 py-2 text-center cursor-pointer hover:bg-gray-100 whitespace-nowrap border-x"
                       onClick={() => handleCounselorSort(String(idx))}
                     >
@@ -842,7 +1028,8 @@ export default function StaffSales() {
                     {months.map((m, idx)=>(<React.Fragment key={`sub-${m.label}`}>
                       <th className="px-2 py-1 text-xs text-right border-x">売上</th>
                       <th className="px-2 py-1 text-xs text-right border-x">件数</th>
-                      <th className="px-2 py-1 text-xs text-right border-x">当月単価</th>
+                      <th className="px-2 py-1 text-xs text-right border-x">単価</th>
+                      <th className="px-2 py-1 text-xs text-right border-x">当日単価</th>
                     </React.Fragment>))}
                   </tr>
                 </thead>
@@ -858,12 +1045,16 @@ export default function StaffSales() {
                       <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-white border-r">{row.name}</td>
                       {row.revenue.map((revenue, j) => {
                         const count = row.count[j]
+                        const sameDayRevenue = row.sameDayRevenue[j]
+                        const sameDayCount = row.sameDayCount[j]
                         const unitPrice = count > 0 ? revenue / count : 0
+                        const sameDayUnitPrice = sameDayCount > 0 ? sameDayRevenue / sameDayCount : 0
                         return (
                           <React.Fragment key={j}>
                             <td className="px-2 py-2 text-right border-x">{Math.round(revenue).toLocaleString()}</td>
                             <td className="px-2 py-2 text-right border-x">{count.toLocaleString()}</td>
                             <td className="px-2 py-2 text-right border-x">{Math.round(unitPrice).toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right border-x">{Math.round(sameDayUnitPrice).toLocaleString()}</td>
                           </React.Fragment>
                         )
                       })}
@@ -871,6 +1062,7 @@ export default function StaffSales() {
                         <div>{Math.round(row.totalRevenue).toLocaleString()}</div>
                         <div className="text-xs text-gray-500">{row.totalCount.toLocaleString()}</div>
                         <div className="text-xs text-gray-500">{Math.round(row.totalUnitPrice).toLocaleString()}</div>
+                        <div className="text-xs text-gray-500">当日: {Math.round(row.totalSameDayUnitPrice).toLocaleString()}</div>
                       </td>
                     </tr>
                   ))}
@@ -1012,7 +1204,7 @@ export default function StaffSales() {
 
         {/* Reservation Route table */}
         <div className="p-4 bg-white border rounded-lg shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">予約経路</h3>
+          <h3 className="mb-3 text-sm font-semibold text-gray-900">来院経路</h3>
           <div className="mt-4 mb-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -1052,7 +1244,7 @@ export default function StaffSales() {
                       className="sticky left-0 z-20 px-3 py-2 text-left border-r cursor-pointer hover:bg-gray-100 whitespace-nowrap bg-gray-50"
                       onClick={() => handleReservationRouteSort('route')}
                     >
-                      予約経路 {getSortIcon('route', reservationRouteSortField, reservationRouteSortDirection)}
+                      来院経路 {getSortIcon('route', reservationRouteSortField, reservationRouteSortDirection)}
                     </th>
                     {months.map((m, idx)=>(<th 
                       key={m.label}

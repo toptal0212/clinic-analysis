@@ -2,18 +2,17 @@
 
 import React, { useMemo, useEffect, useState } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js'
-import { Chart } from 'react-chartjs-2'
-import { AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
+import { categorizeTreatment } from '@/lib/treatmentCategories'
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, ArcElement } from 'chart.js'
+import { Chart, Doughnut, Scatter } from 'react-chartjs-2'
+import { AlertCircle } from 'lucide-react'
 import Pagination from './Pagination'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, ArcElement)
 
 export default function TreatmentSalesTrend() {
   const { state } = useDashboard()
-  const [categoryPage, setCategoryPage] = useState(1)
-  const [clinicPage, setClinicPage] = useState(1)
-  const [agePage, setAgePage] = useState(1)
+  const [selectedClinic, setSelectedClinic] = useState<string>('全院')
   const [majorCategoryPage, setMajorCategoryPage] = useState(1)
   const [mediumCategoryPage, setMediumCategoryPage] = useState(1)
   const itemsPerPage = 10
@@ -39,54 +38,165 @@ export default function TreatmentSalesTrend() {
     return allAccounts
   }
 
-  // Calculate category trends (stacked bar chart data) - using actual category structure from debug
-  const categoryTrends = useMemo(() => {
+  // Get available clinics
+  const availableClinics = useMemo(() => {
     const allData = getAllDailyAccounts()
+    const clinics = new Set<string>(['全院'])
+    allData.forEach((r: any) => {
+      const clinic = r.clinicName || 'その他'
+      if (clinic) clinics.add(clinic)
+    })
+    return Array.from(clinics).sort()
+  }, [state.data.dailyAccounts, state.data.clinicData])
+
+  // Filter data by selected clinic
+  const filteredData = useMemo(() => {
+    const allData = getAllDailyAccounts()
+    if (selectedClinic === '全院') return allData
+    return allData.filter((r: any) => (r.clinicName || 'その他') === selectedClinic)
+  }, [selectedClinic, state.data.dailyAccounts, state.data.clinicData])
+
+  // Detect uncategorized treatments
+  const uncategorizedTreatments = useMemo(() => {
+    const uncategorized: Array<{ record: any, category: string, name: string }> = []
     
-    if (allData.length === 0) {
+    filteredData.forEach((record: any) => {
+      if (Array.isArray(record.paymentItems) && record.paymentItems.length > 0) {
+        record.paymentItems.forEach((item: any) => {
+          const category = item.category || ''
+          const name = item.name || ''
+          const categorized = categorizeTreatment(category, name)
+          
+          // Check if it's truly uncategorized (should not happen with current logic, but check anyway)
+          if (!category && !name) {
+            uncategorized.push({ record, category: '未分類', name: '未分類' })
+          }
+        })
+      } else {
+        const category = record.treatmentCategory || ''
+        const name = record.treatmentName || ''
+        if (!category && !name) {
+          uncategorized.push({ record, category: '未分類', name: '未分類' })
+        }
+      }
+    })
+    
+    return uncategorized
+  }, [filteredData])
+
+  // Calculate category trends (stacked bar chart data) - using categorizeTreatment
+  const categoryTrends = useMemo(() => {
+    if (filteredData.length === 0) {
       return []
     }
 
     // Group data by month
-    const monthlyData = new Map<string, { sales: { [key: string]: number }, accounts: number, unitPrice: number }>()
+    const monthlyData = new Map<string, { sales: { [key: string]: number }, accounts: number, unitPrice: number, patients: { new: number, existing: number } }>()
     
-    allData.forEach((record: any) => {
+    filteredData.forEach((record: any) => {
       const date = new Date(record.recordDate || record.visitDate || record.treatmentDate || record.accountingDate)
-      if (isNaN(date.getTime())) return // Skip invalid dates
+      if (isNaN(date.getTime())) return
 
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       
       if (!monthlyData.has(monthKey)) {
-        monthlyData.set(monthKey, { sales: {}, accounts: 0, unitPrice: 0 })
+        monthlyData.set(monthKey, { sales: {}, accounts: 0, unitPrice: 0, patients: { new: 0, existing: 0 } })
       }
-      
+
       const monthData = monthlyData.get(monthKey)!
       
-      // Use the same category logic as TreatmentCategoryDebug
-      const category = record.paymentItems?.[0]?.category || record.treatmentCategory || '未分類'
-      const amount = record.totalWithTax || 0
-
-      monthData.sales[category] = (monthData.sales[category] || 0) + amount
+      // Categorize using categorizeTreatment
+      let majorCategory = 'その他'
+      if (Array.isArray(record.paymentItems) && record.paymentItems.length > 0) {
+        record.paymentItems.forEach((item: any) => {
+          const categorized = categorizeTreatment(item.category || '', item.name || '')
+          // Map specialty to major category name
+          if (categorized.specialty === 'surgery') majorCategory = '美容外科'
+          else if (categorized.specialty === 'dermatology') majorCategory = '美容皮膚科'
+          else if (categorized.specialty === 'hair_removal') majorCategory = '脱毛'
+          else if (categorized.specialty === 'other') {
+            if (categorized.subcategory === 'ピアス') majorCategory = 'ピアス'
+            else if (categorized.subcategory === '物販') majorCategory = '物販'
+            else if (categorized.subcategory === '麻酔・針・パック') majorCategory = '麻酔・針・パック'
+            else majorCategory = 'その他'
+          }
+          
+          const amount = item.priceWithTax || 0
+          monthData.sales[majorCategory] = (monthData.sales[majorCategory] || 0) + amount
+        })
+      } else {
+        const categorized = categorizeTreatment(record.treatmentCategory || '', record.treatmentName || '')
+        if (categorized.specialty === 'surgery') majorCategory = '美容外科'
+        else if (categorized.specialty === 'dermatology') majorCategory = '美容皮膚科'
+        else if (categorized.specialty === 'hair_removal') majorCategory = '脱毛'
+        else if (categorized.specialty === 'other') {
+          if (categorized.subcategory === 'ピアス') majorCategory = 'ピアス'
+          else if (categorized.subcategory === '物販') majorCategory = '物販'
+          else if (categorized.subcategory === '麻酔・針・パック') majorCategory = '麻酔・針・パック'
+          else majorCategory = 'その他'
+        }
+        
+        const amount = record.totalWithTax || 0
+        monthData.sales[majorCategory] = (monthData.sales[majorCategory] || 0) + amount
+      }
+      
       monthData.accounts += 1
-      monthData.unitPrice += amount
+      monthData.unitPrice += record.totalWithTax || 0
+      
+      // Count patients by type
+      const isFirst = record.isFirst === true || record.isFirstVisit === true
+      if (isFirst) {
+        monthData.patients.new += 1
+      } else {
+        monthData.patients.existing += 1
+      }
     })
 
     const sortedMonths = Array.from(monthlyData.keys()).sort()
-    const categories = Array.from(new Set(allData.map((r: any) => r.paymentItems?.[0]?.category || r.treatmentCategory || '未分類')))
+    const categories = Array.from(new Set(filteredData.flatMap((r: any) => {
+      if (Array.isArray(r.paymentItems) && r.paymentItems.length > 0) {
+        return r.paymentItems.map((item: any) => {
+          const categorized = categorizeTreatment(item.category || '', item.name || '')
+          if (categorized.specialty === 'surgery') return '美容外科'
+          else if (categorized.specialty === 'dermatology') return '美容皮膚科'
+          else if (categorized.specialty === 'hair_removal') return '脱毛'
+          else if (categorized.specialty === 'other') {
+            if (categorized.subcategory === 'ピアス') return 'ピアス'
+            else if (categorized.subcategory === '物販') return '物販'
+            else if (categorized.subcategory === '麻酔・針・パック') return '麻酔・針・パック'
+            else return 'その他'
+          }
+          return 'その他'
+        })
+      }
+      const categorized = categorizeTreatment(r.treatmentCategory || '', r.treatmentName || '')
+      if (categorized.specialty === 'surgery') return '美容外科'
+      else if (categorized.specialty === 'dermatology') return '美容皮膚科'
+      else if (categorized.specialty === 'hair_removal') return '脱毛'
+      else if (categorized.specialty === 'other') {
+        if (categorized.subcategory === 'ピアス') return 'ピアス'
+        else if (categorized.subcategory === '物販') return '物販'
+        else if (categorized.subcategory === '麻酔・針・パック') return '麻酔・針・パック'
+        else return 'その他'
+      }
+      return 'その他'
+    })))
 
     return sortedMonths.map(month => {
       const data = monthlyData.get(month)!
-      const monthName = new Date(month).toLocaleDateString('ja-JP', { year: '2-digit', month: 'numeric' })
+      const date = new Date(month)
+      const monthName = `${String(date.getFullYear()).slice(-2)}年${date.getMonth() + 1}月`
       return {
         month: monthName,
         monthLabel: monthName,
         sales: categories.reduce((acc, cat) => ({ ...acc, [cat]: data.sales[cat] || 0 }), {}),
         totalSales: Object.values(data.sales).reduce((sum, val) => sum + val, 0),
         accounts: data.accounts,
-        unitPrice: data.accounts > 0 ? data.unitPrice / data.accounts : 0
+        unitPrice: data.accounts > 0 ? data.unitPrice / data.accounts : 0,
+        patients: data.patients
       }
     })
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [filteredData])
 
   // Chart data for Category Trend (Stacked Bar Chart)
   const stackedChartData = useMemo(() => {
@@ -97,23 +207,41 @@ export default function TreatmentSalesTrend() {
     const labels = categoryTrends.map(trend => trend.month)
     const categories = Array.from(new Set(categoryTrends.flatMap(t => Object.keys(t.sales))))
     
-    // Distinct color palette for many categories
-    const palette = [
-      '#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316',
-      '#EC4899', '#0EA5E9', '#22D3EE', '#A3E635', '#F43F5E', '#A78BFA', '#14B8A6', '#D946EF',
-      '#60A5FA', '#34D399', '#FB7185', '#EAB308'
-    ]
+    // Color palette matching image
+    const palette: { [key: string]: string } = {
+      '美容外科': '#F59E0B',
+      '美容皮膚科': '#10B981',
+      '脱毛': '#EC4899',
+      '物販': '#8B5CF6',
+      'その他': '#06B6D4',
+      'ピアス': '#F97316',
+      '麻酔・針・パック': '#84CC16'
+    }
 
-    const datasets = categories.map((category, idx) => ({
+    const datasets: any[] = categories.map((category) => ({
       type: 'bar' as const,
       label: category,
       data: categoryTrends.map(trend => trend.sales[category] || 0),
-      backgroundColor: palette[idx % palette.length],
-      borderColor: palette[idx % palette.length],
+      backgroundColor: palette[category] || '#9CA3AF',
+      borderColor: palette[category] || '#9CA3AF',
       borderWidth: 1,
       stack: 'sales',
       yAxisID: 'y'
     }))
+
+    // Add line for total sales
+    datasets.push({
+      type: 'line' as const,
+      label: '売上',
+      data: categoryTrends.map(trend => trend.totalSales),
+      borderColor: '#F97316',
+      backgroundColor: 'rgba(249, 115, 22, 0.1)',
+      borderWidth: 2,
+      fill: false,
+      yAxisID: 'y1',
+      pointRadius: 4,
+      pointBackgroundColor: '#F97316'
+    })
 
     return { labels, datasets }
   }, [categoryTrends])
@@ -121,6 +249,14 @@ export default function TreatmentSalesTrend() {
   const stackedChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 30,
+        bottom: 10,
+        left: 10,
+        right: 10
+      }
+    },
     plugins: {
       legend: {
         position: 'top' as const,
@@ -150,16 +286,39 @@ export default function TreatmentSalesTrend() {
         }
       },
       y: { 
-        stacked: true, 
+        stacked: true,
+        position: 'left' as const,
+        beginAtZero: true,
         ticks: { 
-          callback: (v: any) => `¥${(v/1000000).toFixed(0)}M` 
-        } 
+          callback: (v: any) => `¥${(v/1000000).toFixed(0)}M`,
+          padding: 10
+        },
+        title: {
+          display: true,
+          text: '売上金額',
+          padding: { top: 10, bottom: 0 }
+        }
+      },
+      y1: {
+        type: 'linear' as const,
+        position: 'right' as const,
+        grid: { drawOnChartArea: false },
+        beginAtZero: true,
+        ticks: {
+          callback: (v: any) => `¥${(v/1000000).toFixed(0)}M`,
+          padding: 10
+        },
+        title: {
+          display: true,
+          text: '総売上',
+          padding: { top: 10, bottom: 0 }
+        }
       }
     }
   } as any
 
-  // Calculate line chart data for multiple metrics
-  const lineChartData = useMemo(() => {
+  // Patient count chart (stacked bar + line)
+  const patientChartData = useMemo(() => {
     if (categoryTrends.length === 0) {
       return { labels: [], datasets: [] }
     }
@@ -170,197 +329,131 @@ export default function TreatmentSalesTrend() {
       labels,
       datasets: [
         {
-          type: 'line' as const,
-          label: '売上',
-          data: categoryTrends.map(trend => trend.totalSales),
+          type: 'bar' as const,
+          label: '新規',
+          data: categoryTrends.map(trend => trend.patients.new),
+          backgroundColor: '#3B82F6',
           borderColor: '#3B82F6',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 1,
+          stack: 'patients',
+          yAxisID: 'y'
+        },
+        {
+          type: 'bar' as const,
+          label: '既存',
+          data: categoryTrends.map(trend => trend.patients.existing),
+          backgroundColor: '#60A5FA',
+          borderColor: '#60A5FA',
+          borderWidth: 1,
+          stack: 'patients',
+          yAxisID: 'y'
+        },
+        {
+          type: 'line' as const,
+          label: '患者数',
+          data: categoryTrends.map(trend => trend.patients.new + trend.patients.existing),
+          borderColor: '#F97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.1)',
           borderWidth: 2,
           fill: false,
           yAxisID: 'y1',
           pointRadius: 4,
-          pointBackgroundColor: '#3B82F6'
-        },
-        {
-          type: 'line' as const,
-          label: '会計単価',
-          data: categoryTrends.map(trend => trend.unitPrice),
-          borderColor: '#10B981',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          borderWidth: 2,
-          fill: false,
-          yAxisID: 'y2',
-          pointRadius: 4,
-          pointBackgroundColor: '#10B981'
+          pointBackgroundColor: '#F97316'
         }
       ]
     }
   }, [categoryTrends])
 
-  const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
-          usePointStyle: true,
-          padding: 15,
-        }
-      },
-      tooltip: {
-        mode: 'index' as const,
-        intersect: false,
-        callbacks: {
-          label: function(context: any) {
-            const label = context.dataset.label || ''
-            const value = context.parsed.y
-            if (label === '売上' || label === '会計単価' || label === '単価×成約率') {
-              return `${label}: ¥${value.toLocaleString()}`
-            } else {
-              return `${label}: ${value.toFixed(1)}%`
-            }
-          }
-        }
-      }
-    },
-    scales: {
-      x: { 
-        grid: { display: false },
-        ticks: {
-          maxRotation: 45,
-          minRotation: 45
-        }
-      },
-      y1: { 
-        type: 'linear' as const,
-        position: 'left' as const,
-        ticks: { 
-          callback: (v: any) => `¥${(v/1000000).toFixed(0)}M` 
-        } 
-      },
-      y2: { 
-        type: 'linear' as const,
-        position: 'right' as const,
-        grid: { drawOnChartArea: false },
-        ticks: { 
-          callback: (v: any) => `¥${(v/1000).toFixed(0)}K` 
-        } 
-      },
-      y3: { 
-        type: 'linear' as const,
-        position: 'right' as const,
-        grid: { drawOnChartArea: false },
-        ticks: { 
-          callback: (v: any) => `${v.toFixed(0)}%` 
-        } 
-      }
+  // Calculate metrics for center charts
+  const centerMetrics = useMemo(() => {
+    if (categoryTrends.length === 0) return null
+
+    const latest = categoryTrends[categoryTrends.length - 1]
+    const totalPatients = latest.patients.new + latest.patients.existing
+    const repeatRate = totalPatients > 0 ? (latest.patients.existing / totalPatients) * 100 : 0
+
+    return {
+      accounts: latest.accounts,
+      patients: totalPatients,
+      unitPrice: latest.unitPrice,
+      dailyUnitPrice: latest.accounts > 0 ? latest.totalSales / latest.accounts : 0,
+      repeatRate
     }
-  } as any
+  }, [categoryTrends])
 
-  // Calculate table data
-  const clinicData = useMemo(() => {
-    const allData = getAllDailyAccounts()
-    if (allData.length === 0) return []
-
-    const clinicMap = new Map<string, { sales: number, accounts: number, unitPrice: number }>()
-    
-    allData.forEach((record: any) => {
-      const clinic = record.clinicName || 'その他'
-      const amount = record.totalWithTax || 0
-      
-      if (!clinicMap.has(clinic)) {
-        clinicMap.set(clinic, { sales: 0, accounts: 0, unitPrice: 0 })
-      }
-      
-      const clinicData = clinicMap.get(clinic)!
-      clinicData.sales += amount
-      clinicData.accounts += 1
-      clinicData.unitPrice += amount
-    })
-
-    return Array.from(clinicMap.entries())
-      .map(([clinic, data]) => ({
-        clinic,
-        sales: data.sales,
-        accounts: data.accounts,
-        unitPrice: data.accounts > 0 ? data.sales / data.accounts : 0,
-        sales28Days: data.sales,
-        sales28DaysPercent: 100,
-        sales365DaysPercent: 100,
-        unitPriceConversion: data.accounts > 0 ? (data.sales / data.accounts) * 0.8 : 0,
-        salesComparison28Days: 92.84,
-        salesComparisonPrevYear: 100
-      }))
-      .sort((a, b) => b.sales - a.sales)
-  }, [state.data.dailyAccounts, state.data.clinicData])
-
-  const ageGroupData = useMemo(() => {
-    const allData = getAllDailyAccounts()
-    if (allData.length === 0) return []
-
-    const ageMap = new Map<string, { sales: number, accounts: number, unitPrice: number }>()
-    
-    allData.forEach((record: any) => {
-      const age = record.age || record.patientAge || 'NULL'
-      const amount = record.totalWithTax || 0
-      
-      if (!ageMap.has(age)) {
-        ageMap.set(age, { sales: 0, accounts: 0, unitPrice: 0 })
-      }
-      
-      const ageData = ageMap.get(age)!
-      ageData.sales += amount
-      ageData.accounts += 1
-      ageData.unitPrice += amount
-    })
-
-    return Array.from(ageMap.entries())
-      .map(([age, data]) => ({
-        age: age === 'NULL' ? 'NULL' : `${age}代`,
-        sales: data.sales,
-        accounts: data.accounts,
-        unitPrice: data.accounts > 0 ? data.sales / data.accounts : 0,
-        sales28Days: data.sales,
-        sales28DaysPercent: 100,
-        sales365DaysPercent: 100,
-        unitPriceConversion: data.accounts > 0 ? (data.sales / data.accounts) * 0.8 : 0,
-        salesComparison28Days: 92.84,
-        salesComparisonPrevYear: 100
-      }))
-      .sort((a, b) => b.sales - a.sales)
-  }, [state.data.dailyAccounts, state.data.clinicData])
-
+  // Calculate category breakdown (major and medium)
   const categoryData = useMemo(() => {
-    const allData = getAllDailyAccounts()
-    if (allData.length === 0) return { major: [], medium: [] }
+    if (filteredData.length === 0) return { major: [], medium: [] }
 
-    const majorMap = new Map<string, { sales: number, accounts: number, unitPrice: number }>()
-    const mediumMap = new Map<string, { sales: number, accounts: number, unitPrice: number }>()
+    const majorMap = new Map<string, { sales: number, accounts: number }>()
+    const mediumMap = new Map<string, { sales: number, accounts: number }>()
     
-    allData.forEach((record: any) => {
-      // Use the same category logic as TreatmentCategoryDebug
-      const majorCategory = record.paymentItems?.[0]?.category || record.treatmentCategory || '未分類'
-      const mediumCategory = record.paymentItems?.[0]?.name || record.treatmentName || '未分類'
-      const amount = record.totalWithTax || 0
-      
-      // Major category
-      if (!majorMap.has(majorCategory)) {
-        majorMap.set(majorCategory, { sales: 0, accounts: 0, unitPrice: 0 })
-      }
-      const majorData = majorMap.get(majorCategory)!
-      majorData.sales += amount
-      majorData.accounts += 1
-      majorData.unitPrice += amount
+    filteredData.forEach((record: any) => {
+      if (Array.isArray(record.paymentItems) && record.paymentItems.length > 0) {
+        record.paymentItems.forEach((item: any) => {
+          const categorized = categorizeTreatment(item.category || '', item.name || '')
+          const amount = item.priceWithTax || 0
+          
+          // Major category
+          let majorCategory = 'その他'
+          if (categorized.specialty === 'surgery') majorCategory = '美容外科'
+          else if (categorized.specialty === 'dermatology') majorCategory = '美容皮膚科'
+          else if (categorized.specialty === 'hair_removal') majorCategory = '脱毛'
+          else if (categorized.specialty === 'other') {
+            if (categorized.subcategory === 'ピアス') majorCategory = 'ピアス'
+            else if (categorized.subcategory === '物販') majorCategory = '物販'
+            else if (categorized.subcategory === '麻酔・針・パック') majorCategory = '麻酔・針・パック'
+            else majorCategory = 'その他'
+          }
+          
+          // Medium category
+          const mediumCategory = categorized.subcategory || item.name || 'その他'
+          
+          if (!majorMap.has(majorCategory)) {
+            majorMap.set(majorCategory, { sales: 0, accounts: 0 })
+          }
+          const majorData = majorMap.get(majorCategory)!
+          majorData.sales += amount
+          majorData.accounts += 1
 
-      // Medium category
-      if (!mediumMap.has(mediumCategory)) {
-        mediumMap.set(mediumCategory, { sales: 0, accounts: 0, unitPrice: 0 })
+          if (!mediumMap.has(mediumCategory)) {
+            mediumMap.set(mediumCategory, { sales: 0, accounts: 0 })
+          }
+          const mediumData = mediumMap.get(mediumCategory)!
+          mediumData.sales += amount
+          mediumData.accounts += 1
+        })
+      } else {
+        const categorized = categorizeTreatment(record.treatmentCategory || '', record.treatmentName || '')
+        const amount = record.totalWithTax || 0
+        
+        let majorCategory = 'その他'
+        if (categorized.specialty === 'surgery') majorCategory = '美容外科'
+        else if (categorized.specialty === 'dermatology') majorCategory = '美容皮膚科'
+        else if (categorized.specialty === 'hair_removal') majorCategory = '脱毛'
+        else if (categorized.specialty === 'other') {
+          if (categorized.subcategory === 'ピアス') majorCategory = 'ピアス'
+          else if (categorized.subcategory === '物販') majorCategory = '物販'
+          else if (categorized.subcategory === '麻酔・針・パック') majorCategory = '麻酔・針・パック'
+          else majorCategory = 'その他'
+        }
+        
+        const mediumCategory = categorized.subcategory || record.treatmentName || 'その他'
+        
+        if (!majorMap.has(majorCategory)) {
+          majorMap.set(majorCategory, { sales: 0, accounts: 0 })
+        }
+        const majorData = majorMap.get(majorCategory)!
+        majorData.sales += amount
+        majorData.accounts += 1
+
+        if (!mediumMap.has(mediumCategory)) {
+          mediumMap.set(mediumCategory, { sales: 0, accounts: 0 })
+        }
+        const mediumData = mediumMap.get(mediumCategory)!
+        mediumData.sales += amount
+        mediumData.accounts += 1
       }
-      const mediumData = mediumMap.get(mediumCategory)!
-      mediumData.sales += amount
-      mediumData.accounts += 1
-      mediumData.unitPrice += amount
     })
 
     const majorCategories = Array.from(majorMap.entries())
@@ -369,13 +462,9 @@ export default function TreatmentSalesTrend() {
         sales: data.sales,
         accounts: data.accounts,
         unitPrice: data.accounts > 0 ? data.sales / data.accounts : 0,
-        sales28Days: data.sales,
-        sales28DaysPercent: 100,
-        sales365DaysPercent: 100,
-        unitPriceConversion: data.accounts > 0 ? (data.sales / data.accounts) * 0.8 : 0,
-        salesComparison28Days: 92.84,
-        salesComparisonPrevYear: 100
+        appointmentRate: 0 // Calculate if needed
       }))
+      .filter(item => item.category !== '未分類') // Remove uncategorized
       .sort((a, b) => b.sales - a.sales)
 
     const mediumCategories = Array.from(mediumMap.entries())
@@ -384,17 +473,13 @@ export default function TreatmentSalesTrend() {
         sales: data.sales,
         accounts: data.accounts,
         unitPrice: data.accounts > 0 ? data.sales / data.accounts : 0,
-        sales28Days: data.sales,
-        sales28DaysPercent: 100,
-        sales365DaysPercent: 100,
-        unitPriceConversion: data.accounts > 0 ? (data.sales / data.accounts) * 0.8 : 0,
-        salesComparison28Days: 92.84,
-        salesComparisonPrevYear: 100
+        appointmentRate: 0 // Calculate if needed
       }))
+      .filter(item => item.category !== '未分類') // Remove uncategorized
       .sort((a, b) => b.sales - a.sales)
 
     return { major: majorCategories, medium: mediumCategories }
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [filteredData])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -406,19 +491,11 @@ export default function TreatmentSalesTrend() {
   }
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('ja-JP').format(num)
+    return new Intl.NumberFormat('ja-JP').format(Math.round(num))
   }
 
   const hasRealData = getAllDailyAccounts().length > 0
 
-  // Debug log
-  useEffect(() => {
-    console.log('📊 [TreatmentSalesTrend] Component rendered')
-    console.log('📊 [TreatmentSalesTrend] Has real data:', hasRealData)
-    console.log('📊 [TreatmentSalesTrend] Category trends count:', categoryTrends.length)
-  }, [hasRealData, categoryTrends.length])
-
-  // Show empty state if no data
   if (!hasRealData) {
     return (
       <div className="p-6">
@@ -433,283 +510,180 @@ export default function TreatmentSalesTrend() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Debug Info - Show actual categories being used */}
-      <div className="p-4 rounded-lg bg-blue-50">
-        <h3 className="mb-2 text-sm font-medium text-blue-900">データサマリー</h3>
-        <div className="space-y-1 text-xs text-blue-800">
-          <p>• 総レコード数: {getAllDailyAccounts().length}</p>
-          <p>• 治療カテゴリー数: {Array.from(new Set(getAllDailyAccounts().map((r: any) => r.paymentItems?.[0]?.category || r.treatmentCategory || '未分類'))).length}</p>
-          <p>• 使用中のカテゴリー: {Array.from(new Set(getAllDailyAccounts().map((r: any) => r.paymentItems?.[0]?.category || r.treatmentCategory || '未分類'))).join(', ')}</p>
-        </div>
+      {/* Clinic Selector */}
+      <div className="flex items-center mb-4 space-x-4">
+        <label className="text-sm font-medium text-gray-700">院選択:</label>
+        <select
+          value={selectedClinic}
+          onChange={(e) => setSelectedClinic(e.target.value)}
+          className="px-3 py-2 bg-white border border-gray-300 rounded-md"
+        >
+          {availableClinics.map(clinic => (
+            <option key={clinic} value={clinic}>{clinic}</option>
+          ))}
+        </select>
       </div>
-      {/* Category Trend Chart */}
+
+      {/* Top Section: Sales Trend Chart */}
       <div className="p-6 bg-white border rounded-lg shadow-sm">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー推移</h3>
-        <div className="h-80">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">売上推移と構成比</h3>
+        <div className="h-96">
           <Chart type="bar" data={stackedChartData} options={stackedChartOptions} />
         </div>
       </div>
-      {/* Category Breakdown Table */}
+
+      {/* Bottom Left: Patient Count Chart */}
       <div className="p-6 bg-white border rounded-lg shadow-sm">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別詳細</h3>
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">患者数推移</h3>
+        <div className="h-96">
+          <Chart type="bar" data={patientChartData} options={stackedChartOptions} />
+        </div>
+      </div>
+
+      {/* Center Section: Metrics Charts */}
+      {centerMetrics && (
+        <div className="p-6 bg-white border rounded-lg shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">詳細指標</h3>
+          <div className="space-y-4">
+            {/* 件数 */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-700">件数</span>
+                <span className="relative z-10 px-2 text-lg font-bold text-gray-900 bg-white">{formatNumber(centerMetrics.accounts)}</span>
+              </div>
+              <div className="relative w-full h-8 overflow-visible bg-gray-200 rounded-full">
+                <div 
+                  className="h-full bg-blue-500 rounded-full"
+                  style={{ width: `${Math.min((centerMetrics.accounts / Math.max(centerMetrics.accounts, 1)) * 100, 100)}%` }}
+                >
+                </div>
+              </div>
+            </div>
+
+            {/* 患者数 */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-700">患者数</span>
+                <span className="relative z-10 px-2 text-lg font-bold text-gray-900 bg-white">{formatNumber(centerMetrics.patients)}</span>
+              </div>
+              <div className="relative w-full h-8 overflow-visible bg-gray-200 rounded-full">
+                <div 
+                  className="h-full bg-purple-500 rounded-full"
+                  style={{ width: `${Math.min((centerMetrics.patients / Math.max(centerMetrics.patients, 1)) * 100, 100)}%` }}
+                >
+                </div>
+              </div>
+            </div>
+
+            {/* リピート率 */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-700">リピート率</span>
+                <span className="relative z-10 px-2 text-lg font-bold text-gray-900 bg-white">{centerMetrics.repeatRate.toFixed(1)}%</span>
+              </div>
+              <div className="relative w-full h-8 overflow-visible bg-gray-200 rounded-full">
+                <div 
+                  className="h-full bg-green-500 rounded-full"
+                  style={{ width: `${Math.min(centerMetrics.repeatRate, 100)}%` }}
+                >
+                </div>
+              </div>
+            </div>
+
+            {/* 会計単価 */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-700">会計単価</span>
+                <span className="relative z-10 px-2 text-lg font-bold text-gray-900 bg-white">{formatCurrency(centerMetrics.dailyUnitPrice)}</span>
+              </div>
+              <div className="relative w-full h-8 overflow-visible bg-gray-200 rounded-full">
+                <div 
+                  className="h-full bg-orange-500 rounded-full"
+                  style={{ width: `${Math.min((centerMetrics.dailyUnitPrice / Math.max(centerMetrics.dailyUnitPrice, 1)) * 100, 100)}%` }}
+                >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Major Category Table */}
+      <div className="p-6 bg-white border rounded-lg shadow-sm">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">大カテゴリ別売上</h3>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="py-2 text-left">カテゴリー名</th>
-                <th className="py-2 text-right">総売上</th>
+                <th className="py-2 text-left">大カテゴリ</th>
+                <th className="py-2 text-right">売上</th>
                 <th className="py-2 text-right">件数</th>
-                <th className="py-2 text-right">平均単価</th>
-                <th className="py-2 text-right">売上構成比</th>
+                <th className="py-2 text-right">アポ率</th>
               </tr>
             </thead>
             <tbody>
               {(categoryData.major.length > itemsPerPage
-                ? categoryData.major.slice((categoryPage - 1) * itemsPerPage, categoryPage * itemsPerPage)
+                ? categoryData.major.slice((majorCategoryPage - 1) * itemsPerPage, majorCategoryPage * itemsPerPage)
                 : categoryData.major
-              ).map((item, idx) => {
-                const totalSales = categoryData.major.reduce((sum, cat) => sum + cat.sales, 0)
-                const percentage = totalSales > 0 ? (item.sales / totalSales) * 100 : 0
-                return (
-                  <tr key={idx} className="border-b hover:bg-gray-50">
-                    <td className="py-2 font-medium">{item.category}</td>
-                    <td className="py-2 text-right">{formatCurrency(item.sales)}</td>
-                    <td className="py-2 text-right">{formatNumber(item.accounts)}</td>
-                    <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>
-                    <td className="py-2 text-right">{percentage.toFixed(1)}%</td>
-                  </tr>
-                )
-              })}
+              ).map((item, idx) => (
+                <tr key={idx} className="border-b hover:bg-gray-50">
+                  <td className="py-2 font-medium">{item.category}</td>
+                  <td className="py-2 text-right">{formatCurrency(item.sales)}</td>
+                  <td className="py-2 text-right">{formatNumber(item.accounts)}</td>
+                  <td className="py-2 text-right">{item.appointmentRate.toFixed(1)}%</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
         {categoryData.major.length > itemsPerPage && (
           <Pagination
-            currentPage={categoryPage}
+            currentPage={majorCategoryPage}
             totalPages={Math.ceil(categoryData.major.length / itemsPerPage)}
-            onPageChange={setCategoryPage}
+            onPageChange={setMajorCategoryPage}
             totalItems={categoryData.major.length}
             itemsPerPage={itemsPerPage}
           />
         )}
       </div>
 
-      {/* Line Charts Section */}
-      <div className="p-6 bg-white border rounded-lg shadow-sm">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">詳細トレンド</h3>
-        <div className="h-80">
-          <Chart type="line" data={lineChartData} options={lineChartOptions} />
-        </div>
-      </div>
-
-      {/* Tables Section (one per row) */}
-      {/* Clinic Table */}
-      <div className="p-6 bg-white border rounded-lg shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">院別</h3>
-          <div className="overflow-x-auto">
-            {clinicData.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">
-                <p>データがありません</p>
-              </div>
-            ) : (
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="py-2 text-left">院名</th>
-                    <th className="py-2 text-right">売上_直近28日</th>
-                    <th className="py-2 text-right">28日合計%</th>
-                    <th className="py-2 text-right">365日合計%</th>
-                    <th className="py-2 text-right">単価×成約率</th>
-                    <th className="py-2 text-right">売上_比較28日%</th>
-                    <th className="py-2 text-right">売上_比較前年28日%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(clinicData.length > itemsPerPage
-                    ? clinicData.slice((clinicPage - 1) * itemsPerPage, clinicPage * itemsPerPage)
-                    : clinicData
-                  ).map((item, idx) => (
-                    <tr key={idx} className="border-b hover:bg-gray-50">
-                      <td className="py-2">{item.clinic}</td>
-                      <td className="py-2 text-right">{formatCurrency(item.sales28Days)}</td>
-                      <td className="py-2 text-right">{item.sales28DaysPercent.toFixed(2)}%</td>
-                      <td className="py-2 text-right">{item.sales365DaysPercent.toFixed(2)}%</td>
-                      <td className="py-2 text-right">{formatCurrency(item.unitPriceConversion)}</td>
-                      <td className="py-2 text-right">{item.salesComparison28Days.toFixed(2)}%</td>
-                      <td className="py-2 text-right">{item.salesComparisonPrevYear.toFixed(2)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          {clinicData.length > itemsPerPage && (
-            <Pagination
-              currentPage={clinicPage}
-              totalPages={Math.ceil(clinicData.length / itemsPerPage)}
-              onPageChange={setClinicPage}
-              totalItems={clinicData.length}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
-        </div>
-
-      {/* Age Group Table */}
-      <div className="p-6 bg-white border rounded-lg shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">年代</h3>
-          <div className="overflow-x-auto">
-            {ageGroupData.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">
-                <p>データがありません</p>
-              </div>
-            ) : (
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="py-2 text-left">年代</th>
-                    <th className="py-2 text-right">売上_直近28日</th>
-                    <th className="py-2 text-right">28日合計%</th>
-                    <th className="py-2 text-right">365日合計%</th>
-                    <th className="py-2 text-right">単価×成約率</th>
-                    <th className="py-2 text-right">売上_比較28日%</th>
-                    <th className="py-2 text-right">売上_比較前年28日%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(ageGroupData.length > itemsPerPage
-                    ? ageGroupData.slice((agePage - 1) * itemsPerPage, agePage * itemsPerPage)
-                    : ageGroupData
-                  ).map((item, idx) => (
-                    <tr key={idx} className="border-b hover:bg-gray-50">
-                      <td className="py-2">{item.age}</td>
-                      <td className="py-2 text-right">{formatCurrency(item.sales28Days)}</td>
-                      <td className="py-2 text-right">{item.sales28DaysPercent.toFixed(2)}%</td>
-                      <td className="py-2 text-right">{item.sales365DaysPercent.toFixed(2)}%</td>
-                      <td className="py-2 text-right">{formatCurrency(item.unitPriceConversion)}</td>
-                      <td className="py-2 text-right">{item.salesComparison28Days.toFixed(2)}%</td>
-                      <td className="py-2 text-right">{item.salesComparisonPrevYear.toFixed(2)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          {ageGroupData.length > itemsPerPage && (
-            <Pagination
-              currentPage={agePage}
-              totalPages={Math.ceil(ageGroupData.length / itemsPerPage)}
-              onPageChange={setAgePage}
-              totalItems={ageGroupData.length}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
-      </div>
-
-      {/* Major Category Table */}
-      <div className="p-6 bg-white border rounded-lg shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別</h3>
-            <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-700">大カテゴリー</h4>
-            </div>
-            <div className="overflow-x-auto">
-              {categoryData.major.length === 0 ? (
-                <div className="py-8 text-center text-gray-500">
-                  <p>データがありません</p>
-                </div>
-              ) : (
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="py-2 text-left">カテゴリー</th>
-                      <th className="py-2 text-right">売上_直近28日</th>
-                      <th className="py-2 text-right">28日合計%</th>
-                      <th className="py-2 text-right">365日合計%</th>
-                      <th className="py-2 text-right">単価×成約率</th>
-                      <th className="py-2 text-right">売上_比較28日%</th>
-                      <th className="py-2 text-right">売上_比較前年28日%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(categoryData.major.length > itemsPerPage
-                      ? categoryData.major.slice((majorCategoryPage - 1) * itemsPerPage, majorCategoryPage * itemsPerPage)
-                      : categoryData.major
-                    ).map((item, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="py-2">{item.category}</td>
-                        <td className="py-2 text-right">{formatCurrency(item.sales28Days)}</td>
-                        <td className="py-2 text-right">{item.sales28DaysPercent.toFixed(2)}%</td>
-                        <td className="py-2 text-right">{item.sales365DaysPercent.toFixed(2)}%</td>
-                        <td className="py-2 text-right">{formatCurrency(item.unitPriceConversion)}</td>
-                        <td className="py-2 text-right">{item.salesComparison28Days.toFixed(2)}%</td>
-                        <td className="py-2 text-right">{item.salesComparisonPrevYear.toFixed(2)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            {categoryData.major.length > itemsPerPage && (
-              <Pagination
-                currentPage={majorCategoryPage}
-                totalPages={Math.ceil(categoryData.major.length / itemsPerPage)}
-                onPageChange={setMajorCategoryPage}
-                totalItems={categoryData.major.length}
-                itemsPerPage={itemsPerPage}
-              />
-            )}
-      </div>
-
       {/* Medium Category Table */}
       <div className="p-6 bg-white border rounded-lg shadow-sm">
-            <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-700">中カテゴリー</h4>
-            </div>
-            <div className="overflow-x-auto">
-              {categoryData.medium.length === 0 ? (
-                <div className="py-8 text-center text-gray-500">
-                  <p>データがありません</p>
-                </div>
-              ) : (
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="py-2 text-left">カテゴリー</th>
-                      <th className="py-2 text-right">売上_直近28日</th>
-                      <th className="py-2 text-right">28日合計%</th>
-                      <th className="py-2 text-right">365日合計%</th>
-                      <th className="py-2 text-right">単価×成約率</th>
-                      <th className="py-2 text-right">売上_比較28日%</th>
-                      <th className="py-2 text-right">売上_比較前年28日%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(categoryData.medium.length > itemsPerPage
-                      ? categoryData.medium.slice((mediumCategoryPage - 1) * itemsPerPage, mediumCategoryPage * itemsPerPage)
-                      : categoryData.medium
-                    ).map((item, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="py-2">{item.category}</td>
-                        <td className="py-2 text-right">{formatCurrency(item.sales28Days)}</td>
-                        <td className="py-2 text-right">{item.sales28DaysPercent.toFixed(2)}%</td>
-                        <td className="py-2 text-right">{item.sales365DaysPercent.toFixed(2)}%</td>
-                        <td className="py-2 text-right">{formatCurrency(item.unitPriceConversion)}</td>
-                        <td className="py-2 text-right">{item.salesComparison28Days.toFixed(2)}%</td>
-                        <td className="py-2 text-right">{item.salesComparisonPrevYear.toFixed(2)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            {categoryData.medium.length > itemsPerPage && (
-              <Pagination
-                currentPage={mediumCategoryPage}
-                totalPages={Math.ceil(categoryData.medium.length / itemsPerPage)}
-                onPageChange={setMediumCategoryPage}
-                totalItems={categoryData.medium.length}
-                itemsPerPage={itemsPerPage}
-              />
-            )}
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">中カテゴリ別売上</h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="py-2 text-left">中カテゴリ</th>
+                <th className="py-2 text-right">売上</th>
+                <th className="py-2 text-right">件数</th>
+                <th className="py-2 text-right">アポ率</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(categoryData.medium.length > itemsPerPage
+                ? categoryData.medium.slice((mediumCategoryPage - 1) * itemsPerPage, mediumCategoryPage * itemsPerPage)
+                : categoryData.medium
+              ).map((item, idx) => (
+                <tr key={idx} className="border-b hover:bg-gray-50">
+                  <td className="py-2 font-medium">{item.category}</td>
+                  <td className="py-2 text-right">{formatCurrency(item.sales)}</td>
+                  <td className="py-2 text-right">{formatNumber(item.accounts)}</td>
+                  <td className="py-2 text-right">{item.appointmentRate.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {categoryData.medium.length > itemsPerPage && (
+          <Pagination
+            currentPage={mediumCategoryPage}
+            totalPages={Math.ceil(categoryData.medium.length / itemsPerPage)}
+            onPageChange={setMediumCategoryPage}
+            totalItems={categoryData.medium.length}
+            itemsPerPage={itemsPerPage}
+          />
+        )}
       </div>
     </div>
   )

@@ -22,6 +22,7 @@ import HospitalTrendGraphs from './HospitalTrendGraphs'
 import AnnualSales from './AnnualSales'
 import DebugDisplay from './DebugDisplay'
 import SalesTableAnalysis from './SalesTableAnalysis'
+import SalesTableAnalysisClean from './SalesTableAnalysisClean'
 import Cancellation from './Cancellation'
 import TreatmentCategoryDebug from './TreatmentCategoryDebug'
 import SalesAnalysis from './SalesAnalysis'
@@ -33,6 +34,7 @@ import SalesComparison from './SalesComparison'
 import CustomerAttributesAnalysis from './CustomerAttributesAnalysis'
 import ClinicSales from './ClinicSales'
 import MonthlyProgress from './MonthlyProgress'
+import Settings from './Settings'
 
 interface DashboardProps {
   activeTab: string
@@ -151,6 +153,8 @@ export default function Dashboard({ activeTab, tabLoading }: DashboardProps) {
         return <RepeatAnalysis />
       case 'advertising':
         return <AdvertisingAnalysis />
+      case 'settings':
+        return <Settings />
       case 'treatment-hierarchy':
         return <TreatmentHierarchyAnalysis dateRange={dateRange} />
       case 'clinic-data':
@@ -160,7 +164,14 @@ export default function Dashboard({ activeTab, tabLoading }: DashboardProps) {
       case 'debug':
         return <DebugDisplay />
       case 'sales-table':
-        return <SalesTableAnalysis dateRange={dateRange} />
+        return <SalesTableAnalysisClean dateRange={dateRange} />
+      case 'doctor-sales':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">医師別売り上げ</h2>
+            <StaffSales />
+          </div>
+        )
       case 'treatment-category-debug':
         return <TreatmentCategoryDebug />
       case 'errors':

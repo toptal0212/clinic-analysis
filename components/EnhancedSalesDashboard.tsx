@@ -143,7 +143,7 @@ const CLINIC_NAME_MAP: Record<string, string> = {
 }
 
 const CLINIC_TABLE_TITLE =
-  '担当者\t院\t新/既/物\t来院日/施術日\t名前\t年齢\t予約内容\t処置希望\t知ったきっかけ\t予約経路\t処置内容\t二重\tくま治療\t糸リフト\t小顔（S,BF)\t鼻・人中手術\tボディー脂肪吸引\t豊胸\tその他外科\t注入\tスキン\t脱毛\t物販/ピアス\t予約金\t後日振込日/予約金\t合計\tU/C\t管理'
+  '担当者\t院\t新/既/物\t来院日/施術日\t名前\t年齢\t予約内容\t処置希望\t知ったきっかけ\t来院経路\t処置内容\t二重\tくま治療\t糸リフト\t小顔（S,BF)\t鼻・人中手術\tボディー脂肪吸引\t豊胸\tその他外科\t注入\tスキン\t脱毛\t物販/ピアス\t予約金\t後日振込日/予約金\t合計\tU/C\t管理'
 
 const parseDateValue = (value: Date | string | null | undefined) => {
   if (!value) return null
@@ -829,7 +829,7 @@ export default function EnhancedSalesDashboard() {
                     <th className="px-3 py-2 text-left text-gray-500 uppercase">予約内容</th>
                     <th className="px-3 py-2 text-left text-gray-500 uppercase">処置希望</th>
                     <th className="px-3 py-2 text-left text-gray-500 uppercase">知ったきっかけ</th>
-                    <th className="px-3 py-2 text-left text-gray-500 uppercase">予約経路</th>
+                    <th className="px-3 py-2 text-left text-gray-500 uppercase">来院経路</th>
                     <th className="px-3 py-2 text-left text-gray-500 uppercase">処置内容</th>
                     {CATEGORY_COLUMNS.map(column => (
                       <th key={column.key} className="px-3 py-2 text-right text-gray-500 uppercase whitespace-nowrap">

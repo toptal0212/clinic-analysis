@@ -235,57 +235,10 @@ export default function Cancellation() {
 
   // Show empty state if no cancellation data
   if (!hasCancellationData) {
-    const totalRecords = all.length
-    const hasDataButNoCancel = totalRecords > 0
-    const sampleRecord = all[0]
-    
     return (
-      <div className="p-6 space-y-6">
-        <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            📊 予約キャンセルのデータがありません
-          </p>
-          {hasDataButNoCancel ? (
-            <div className="mt-2 space-y-2 text-xs text-gray-600">
-              <p>• データレコード数: {totalRecords}件</p>
-              <p>• 選択中の院: {state.selectedClinic === 'all' ? '全院' : state.selectedClinic}</p>
-              <p>• 選択中の期間: {state.dateRange?.start} ～ {state.dateRange?.end}</p>
-              <p>• キャンセル関連の金額フィールド（cancelPriceWithTax, refundPriceWithTax, coolingoffPriceWithTax）に値がありません</p>
-              <div className="mt-3 p-2 bg-white rounded border">
-                <p className="font-medium mb-1">サンプルレコードの構造:</p>
-                <pre className="text-xs overflow-auto">
-                  {JSON.stringify({
-                    recordDate: sampleRecord?.recordDate,
-                    visitorName: sampleRecord?.visitorName,
-                    cancelPriceWithTax: sampleRecord?.cancelPriceWithTax,
-                    refundPriceWithTax: sampleRecord?.refundPriceWithTax,
-                    coolingoffPriceWithTax: sampleRecord?.coolingoffPriceWithTax,
-                    totalWithTax: sampleRecord?.totalWithTax,
-                    hasCancelFields: !!(sampleRecord?.cancelPriceWithTax || sampleRecord?.refundPriceWithTax || sampleRecord?.coolingoffPriceWithTax)
-                  }, null, 2)}
-                </pre>
-              </div>
-              <p className="mt-2 text-yellow-700">
-                💡 ヒント: 期間を広げるか、「全院」を選択してデータを確認してください
-              </p>
-            </div>
-          ) : (
-            <div className="mt-2 space-y-2 text-xs text-gray-600">
-              <p>• データが読み込まれていません</p>
-              <p>• API接続状態: {state.apiConnected ? '✅ 接続済み' : '❌ 未接続'}</p>
-              {!state.apiConnected && (
-                <p>• APIに接続するか、CSVファイルをインポートしてください</p>
-              )}
-              {state.apiConnected && (
-                <div className="mt-2 space-y-1">
-                  <p>• フィルター条件を確認してください:</p>
-                  <p>  - 院選択: {state.selectedClinic === 'all' ? '全院' : state.selectedClinic}</p>
-                  <p>  - 期間: {state.dateRange?.start || '未設定'} ～ {state.dateRange?.end || '未設定'}</p>
-                  <p>• ヘッダーの「フィルター適用」ボタンをクリックしてデータを更新してください</p>
-                </div>
-              )}
-            </div>
-          )}
+      <div className="flex items-center justify-center p-12">
+        <div className="text-center">
+          <p className="text-lg text-gray-600">予約キャンセルされたデータはありません。</p>
         </div>
       </div>
     )
@@ -306,7 +259,7 @@ export default function Cancellation() {
                 scales: { y1: { ticks: { callback:(v:any)=>`¥${(Number(v)/1000000).toFixed(0)}M` } } }
               }} />
             </div>
-            <div className="mt-4 h-40">
+            <div className="h-40 mt-4">
               <Chart type="bar" data={categoryStack as any} options={{
                 responsive: true,
                 maintainAspectRatio: false,

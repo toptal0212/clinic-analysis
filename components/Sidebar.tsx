@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useDashboard } from '@/contexts/DashboardContext'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import { 
   BarChart3, 
   TrendingUp, 
@@ -17,7 +20,8 @@ import {
   Stethoscope,
   Building2,
   Table,
-  Database
+  Database,
+  Settings as SettingsIcon
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -29,42 +33,349 @@ interface SidebarProps {
 
   const menuItems = [
     { id: 'overview', label: '概要', icon: Home },
-    { id: 'sales-analysis', label: '売上分析', icon: BarChart3 },
+    { id: 'clinic-sales', label: '院別　集計', icon: Building2 },
+    { id: 'daily', label: '院別　集計　（日別）', icon: Calendar },
+    { id: 'sales-table', label: '院別　売り上げ表', icon: Table },
+    { id: 'staff-sales', label: 'スタッフ別売り上げ', icon: Users },
+    { id: 'doctor-sales', label: '医師別売り上げ', icon: Stethoscope },
+    { id: 'clinic-comparison', label: '全院比較', icon: Building2 },
     { id: 'treatment-trend', label: '治療別傾向分析', icon: Stethoscope },
+    { id: 'sales-analysis', label: '売上分析', icon: BarChart3 },
     { id: 'treatment-sales', label: '治療売上推移', icon: TrendingUp },
     { id: 'annual-sales', label: '年間売上推移', icon: TrendingUp },
     { id: 'cancellation', label: '予約キャンセル', icon: Calendar },
     { id: 'repeat-analysis', label: 'リ ピー 卜分析', icon: RefreshCw },
     { id: 'cross-sell', label: 'クロスセル', icon: BarChart3 },
-    { id: 'staff-sales', label: 'ス夕ッフ別売上', icon: Users },
     { id: 'sales-comparison', label: '売上比較', icon: TrendingUp },
     { id: 'customer-attributes', label: '顧客属性分析', icon: Users },
-    { id: 'clinic-comparison', label: '院比較', icon: Building2 },
-    { id: 'clinic-sales', label: '院別売上', icon: Building2 },
     { id: 'monthly-progress', label: '今月進捗', icon: Calendar },
-    // { id: 'summary', label: 'サマリー分析', icon: BarChart3 },
-    { id: 'daily', label: '日別分析', icon: Calendar },
     { id: 'patients', label: '来院者情報', icon: Users },
-    // { id: 'services', label: '役務分析', icon: Package },
-    // { id: 'treatment-hierarchy', label: '施術階層分析', icon: Stethoscope },
-    // { id: 'clinic-data', label: 'クリニック別データ', icon: Building2 },
-    // { id: 'hospital-trends', label: '売上・来院数推移', icon: TrendingUp },
-    // { id: 'sales-table', label: '売上表分析', icon: Table },
-    // { id: 'treatment-category-debug', label: '治療カテゴリーデバッグ', icon: Database },
-    // { id: 'debug', label: 'デバッグ情報', icon: AlertTriangle },
     { id: 'goals', label: '目標達成率', icon: Target },
-    // { id: 'repeat', label: 'リピート率', icon: RefreshCw },
     { id: 'advertising', label: '広告分析', icon: MousePointer },
-    // { id: 'errors', label: 'エラー表示', icon: AlertTriangle }
+    { id: 'settings', label: '設定', icon: SettingsIcon },
   ]
 
 export default function Sidebar({ isOpen, onClose, activeTab, onTabChange }: SidebarProps) {
+  const { state } = useDashboard()
   const [filters, setFilters] = useState({
     dateLevel: 'month',
     period: 'past1',
     clinic: 'all',
     conversionThreshold: 5000
   })
+
+  const handleExportCSV = () => {
+    try {
+      // CSV export: Only exports data, does not include sidebar (data-only export)
+      const data = state.data.dailyAccounts || []
+      if (data.length === 0) {
+        alert('エクスポートするデータがありません')
+        return
+      }
+
+      // Create CSV headers from first record
+      const headers = Object.keys(data[0] || {})
+      const csvRows = [
+        headers.join(','),
+        ...data.map(record => 
+          headers.map(header => {
+            const value = record[header]
+            if (value === null || value === undefined) return '""'
+            if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`
+            return `"${String(value).replace(/"/g, '""')}"`
+          }).join(',')
+        )
+      ]
+
+      const csvContent = csvRows.join('\n')
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+      link.setAttribute('download', `dashboard_export_${timestamp}.csv`)
+      
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      URL.revokeObjectURL(url)
+      alert(`CSVファイルをエクスポートしました: ${data.length}件のレコード`)
+    } catch (error) {
+      console.error('CSV export error:', error)
+      alert('CSVエクスポートに失敗しました')
+    }
+  }
+
+  const handleExportJPG = async () => {
+    try {
+      // Capture ONLY dashboard content (main element) - WITHOUT sidebar and header
+      const mainContentArea = document.querySelector('main') || 
+                              document.querySelector('[role="main"]') ||
+                              document.body
+      
+      if (!mainContentArea) {
+        alert('エクスポートするコンテンツが見つかりません')
+        return
+      }
+
+      // Find and temporarily hide sidebar and header during capture
+      const sidebar = document.querySelector('div.fixed.inset-y-0, div[class*="sidebar"], aside') as HTMLElement
+      const header = document.querySelector('header') as HTMLElement
+      const sidebarOriginalDisplay = sidebar?.style.display || ''
+      const sidebarOriginalVisibility = sidebar?.style.visibility || ''
+      const headerOriginalDisplay = header?.style.display || ''
+      const headerOriginalVisibility = header?.style.visibility || ''
+      
+      if (sidebar) {
+        sidebar.style.display = 'none'
+        sidebar.style.visibility = 'hidden'
+      }
+      if (header) {
+        header.style.display = 'none'
+        header.style.visibility = 'hidden'
+      }
+
+        try {
+          // Use html2canvas to capture the page
+          if (typeof window !== 'undefined') {
+            
+            // Save original scroll position and overflow styles
+            const originalScrollTop = window.pageYOffset || document.documentElement.scrollTop
+            const originalScrollLeft = window.pageXOffset || document.documentElement.scrollLeft
+            const mainElement = mainContentArea as HTMLElement
+            const originalOverflow = mainElement.style.overflow || ''
+            const originalOverflowX = mainElement.style.overflowX || ''
+            const originalOverflowY = mainElement.style.overflowY || ''
+            
+            // Temporarily remove overflow restrictions to capture full content
+            mainElement.style.overflow = 'visible'
+            mainElement.style.overflowX = 'visible'
+            mainElement.style.overflowY = 'visible'
+            
+            // Scroll to top-left to capture from beginning
+            window.scrollTo(0, 0)
+            if (mainContentArea instanceof HTMLElement) {
+              mainContentArea.scrollTop = 0
+              mainContentArea.scrollLeft = 0
+            }
+            
+            // Wait a bit for scroll to complete
+            await new Promise(resolve => setTimeout(resolve, 100))
+            
+            // Get full scrollable dimensions (full page capture)
+            const fullWidth = Math.max(
+              mainContentArea.scrollWidth,
+              (mainContentArea as HTMLElement).offsetWidth,
+              document.documentElement.scrollWidth,
+              window.innerWidth
+            )
+            const fullHeight = Math.max(
+              mainContentArea.scrollHeight,
+              (mainContentArea as HTMLElement).offsetHeight,
+              document.documentElement.scrollHeight,
+              window.innerHeight
+            )
+            
+            // Capture full page with html2canvas
+            const canvas = await html2canvas(mainContentArea as HTMLElement, {
+              scale: 1,
+              width: fullWidth,
+              height: fullHeight,
+              useCORS: true,
+              logging: false,
+              windowWidth: fullWidth,
+              windowHeight: fullHeight,
+              scrollX: 0,
+              scrollY: 0,
+              allowTaint: true,
+              backgroundColor: '#f9fafb', // Match bg-gray-50
+              ignoreElements: (element: Element) => {
+                // Ignore sidebar, header, and overlay elements
+                if (!(element instanceof HTMLElement)) return false;
+                return element.tagName === 'HEADER' ||
+                       (element.classList.contains('fixed') && 
+                        (element.classList.contains('inset-y-0') || 
+                         element.classList.contains('inset-0') ||
+                         (element.getAttribute('class')?.includes('sidebar') ?? false)))
+              }
+            })
+            
+            // Restore original scroll position and overflow styles
+            window.scrollTo(originalScrollLeft, originalScrollTop)
+            if (mainContentArea instanceof HTMLElement) {
+              mainContentArea.scrollTop = originalScrollTop
+              mainContentArea.scrollLeft = originalScrollLeft
+            }
+            mainElement.style.overflow = originalOverflow
+            mainElement.style.overflowX = originalOverflowX
+            mainElement.style.overflowY = originalOverflowY
+          
+          // Create image with exact dimensions
+          const link = document.createElement('a')
+          link.download = `dashboard_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.jpg`
+          link.href = canvas.toDataURL('image/jpeg', 0.95) // High quality JPEG
+          link.click()
+          alert(`JPGファイルをエクスポートしました (${fullWidth}x${fullHeight}px)`)
+        }
+      } finally {
+        // Restore sidebar and header visibility
+        if (sidebar) {
+          sidebar.style.display = sidebarOriginalDisplay
+          sidebar.style.visibility = sidebarOriginalVisibility
+        }
+        if (header) {
+          header.style.display = headerOriginalDisplay
+          header.style.visibility = headerOriginalVisibility
+        }
+      }
+    } catch (error) {
+      console.error('JPG export error:', error)
+      alert('JPGエクスポートに失敗しました。ブラウザの印刷機能を使用してください。')
+    }
+  }
+
+  const handleExportPDF = async () => {
+    try {
+      // Use jsPDF and html2canvas to create PDF
+      if (typeof window !== 'undefined') {
+        
+        // Capture ONLY dashboard content (main element) - WITHOUT sidebar and header
+        const mainContentArea = document.querySelector('main') || 
+                               document.querySelector('[role="main"]') ||
+                               document.body
+        
+        if (!mainContentArea) {
+          alert('エクスポートするコンテンツが見つかりません')
+          return
+        }
+
+        // Find and temporarily hide sidebar and header during capture
+        const sidebar = document.querySelector('div.fixed.inset-y-0, div[class*="sidebar"], aside') as HTMLElement
+        const header = document.querySelector('header') as HTMLElement
+        const sidebarOriginalDisplay = sidebar?.style.display || ''
+        const sidebarOriginalVisibility = sidebar?.style.visibility || ''
+        const headerOriginalDisplay = header?.style.display || ''
+        const headerOriginalVisibility = header?.style.visibility || ''
+        
+        if (sidebar) {
+          sidebar.style.display = 'none'
+          sidebar.style.visibility = 'hidden'
+        }
+        if (header) {
+          header.style.display = 'none'
+          header.style.visibility = 'hidden'
+        }
+
+        try {
+          // Save original scroll position and overflow styles
+          const originalScrollTop = window.pageYOffset || document.documentElement.scrollTop
+          const originalScrollLeft = window.pageXOffset || document.documentElement.scrollLeft
+          const mainElement = mainContentArea as HTMLElement
+          const originalOverflow = mainElement.style.overflow || ''
+          const originalOverflowX = mainElement.style.overflowX || ''
+          const originalOverflowY = mainElement.style.overflowY || ''
+          
+          // Temporarily remove overflow restrictions to capture full content
+          mainElement.style.overflow = 'visible'
+          mainElement.style.overflowX = 'visible'
+          mainElement.style.overflowY = 'visible'
+          
+          // Scroll to top-left to capture from beginning
+          window.scrollTo(0, 0)
+          if (mainContentArea instanceof HTMLElement) {
+            mainContentArea.scrollTop = 0
+            mainContentArea.scrollLeft = 0
+          }
+          
+          // Wait a bit for scroll to complete
+          await new Promise(resolve => setTimeout(resolve, 100))
+          
+          // Get full scrollable dimensions (full page capture)
+          const fullWidth = Math.max(
+            mainContentArea.scrollWidth,
+            (mainContentArea as HTMLElement).offsetWidth,
+            document.documentElement.scrollWidth,
+            window.innerWidth
+          )
+          const fullHeight = Math.max(
+            mainContentArea.scrollHeight,
+            (mainContentArea as HTMLElement).offsetHeight,
+            document.documentElement.scrollHeight,
+            window.innerHeight
+          )
+
+          const canvas = await html2canvas(mainContentArea as HTMLElement, {
+            scale: 1,
+            width: fullWidth,
+            height: fullHeight,
+            useCORS: true,
+            logging: false,
+            windowWidth: fullWidth,
+            windowHeight: fullHeight,
+            scrollX: 0,
+            scrollY: 0,
+            allowTaint: true,
+            backgroundColor: '#f9fafb', // Match bg-gray-50
+            ignoreElements: (element: Element) => {
+              // Ignore sidebar, header, and overlay elements
+              if (!(element instanceof HTMLElement)) return false;
+              return element.tagName === 'HEADER' ||
+                     (element.classList.contains('fixed') && 
+                      (element.classList.contains('inset-y-0') || 
+                       element.classList.contains('inset-0') ||
+                       (element.getAttribute('class')?.includes('sidebar') ?? false)))
+            }
+          })
+          
+          // Restore original scroll position and overflow styles
+          window.scrollTo(originalScrollLeft, originalScrollTop)
+          if (mainContentArea instanceof HTMLElement) {
+            mainContentArea.scrollTop = originalScrollTop
+            mainContentArea.scrollLeft = originalScrollLeft
+          }
+          mainElement.style.overflow = originalOverflow
+          mainElement.style.overflowX = originalOverflowX
+          mainElement.style.overflowY = originalOverflowY
+          
+          const imgData = canvas.toDataURL('image/png', 1.0)
+          
+          // Convert pixels to mm (1 inch = 25.4mm, standard DPI is 96)
+          const pxToMm = 25.4 / 96
+          const pdfWidth = fullWidth * pxToMm
+          const pdfHeight = fullHeight * pxToMm
+          
+          // Create PDF with exact dimensions matching the display
+          const pdf = new jsPDF({
+            orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
+            unit: 'mm',
+            format: [pdfWidth, pdfHeight] // Custom size matching display
+          })
+          
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST')
+          
+          pdf.save(`dashboard_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pdf`)
+          alert(`PDFファイルをエクスポートしました (${Math.round(pdfWidth)}x${Math.round(pdfHeight)}mm)`)
+        } finally {
+          // Restore sidebar and header visibility
+          if (sidebar) {
+            sidebar.style.display = sidebarOriginalDisplay
+            sidebar.style.visibility = sidebarOriginalVisibility
+          }
+          if (header) {
+            header.style.display = headerOriginalDisplay
+            header.style.visibility = headerOriginalVisibility
+          }
+        }
+      }
+    } catch (error) {
+      console.error('PDF export error:', error)
+      alert('PDFエクスポートに失敗しました。ブラウザの印刷機能を使用してください。')
+    }
+  }
 
   return (
     <>
@@ -195,15 +506,27 @@ export default function Sidebar({ isOpen, onClose, activeTab, onTabChange }: Sid
           {/* Export Buttons */}
           <div className="p-4 border-t border-gray-200">
             <div className="flex space-x-2">
-              <button className="flex-1 py-2 text-xs btn btn-outline">
+              <button 
+                onClick={handleExportCSV}
+                className="flex-1 py-2 text-xs btn btn-outline hover:bg-gray-100"
+                title="CSV形式でデータをエクスポート"
+              >
                 <Download className="w-4 h-4 mr-1" />
                 CSV
               </button>
-              <button className="flex-1 py-2 text-xs btn btn-outline">
+              <button 
+                onClick={handleExportJPG}
+                className="flex-1 py-2 text-xs btn btn-outline hover:bg-gray-100"
+                title="JPG形式でスクリーンショットをエクスポート"
+              >
                 <Download className="w-4 h-4 mr-1" />
                 JPG
               </button>
-              <button className="flex-1 py-2 text-xs btn btn-outline">
+              <button 
+                onClick={handleExportPDF}
+                className="flex-1 py-2 text-xs btn btn-outline hover:bg-gray-100"
+                title="PDF形式でエクスポート"
+              >
                 <Download className="w-4 h-4 mr-1" />
                 PDF
               </button>

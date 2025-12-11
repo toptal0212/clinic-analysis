@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { 
   DollarSign, 
@@ -12,6 +12,11 @@ import {
   AlertCircle
 } from 'lucide-react'
 import SalesCharts from './SalesCharts'
+import { 
+  validateRecord, 
+  getCategoryFromConsultation,
+  CONSULTATION_MAPPINGS
+} from '@/lib/consultationMapping'
 
 interface SalesTableAnalysisProps {
   dateRange: { start: Date, end: Date }
@@ -19,8 +24,7 @@ interface SalesTableAnalysisProps {
 
 export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProps) {
   const { state } = useDashboard()
-  const [selectedMonth, setSelectedMonth] = useState<string>('')
-
+  
   // Extract available months from data
   const availableMonths = useMemo(() => {
     if (!state.data.dailyAccounts?.length) return []
@@ -38,8 +42,72 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
       }
     })
     
-    return Array.from(months).sort().reverse()
+    return Array.from(months).sort().reverse() // Newest first
   }, [state.data.dailyAccounts])
+  
+  const [selectedMonth, setSelectedMonth] = useState<string>(availableMonths[0] || '')
+  
+  // Update selected month when available months change
+  useEffect(() => {
+    if (availableMonths.length > 0 && !selectedMonth) {
+      setSelectedMonth(availableMonths[0])
+    }
+  }, [availableMonths, selectedMonth])
+
+
+  // Detect errors in records (missing required fields and uncategorized treatments)
+  const recordErrors = useMemo(() => {
+    if (!state.data.dailyAccounts?.length || !selectedMonth) return []
+    
+    const targetMonthData = state.data.dailyAccounts.filter(record => {
+      const visitDate = record.visitDate || record.recordDate || record.accountingDate
+      if (!visitDate) return false
+      
+      const date = new Date(visitDate)
+      if (isNaN(date.getTime())) return false
+      
+      const recordMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      return recordMonth === selectedMonth
+    })
+
+    return targetMonthData.map((record, index) => {
+      const errors: string[] = []
+      
+      // Check for missing referral source (知ったきっかけ)
+      if (!record.visitorInflowSourceName && !record.visitorInflowSourceLabel) {
+        errors.push('知ったきっかけが入力されていません')
+      }
+      
+      // Check for missing reservation route (来院経路)
+      if (!record.reservationInflowPathLabel && !record.reservationRoute) {
+        errors.push('来院経路が入力されていません')
+      }
+      
+      // Check for uncategorized treatments using consultation mapping
+      const consultationName = record.treatmentName || record.treatmentCategory || ''
+      if (consultationName && consultationName.includes('ご相談')) {
+        const mapping = getCategoryFromConsultation(consultationName)
+        if (!mapping) {
+          errors.push('どの分類にも属さない施術が登録されました')
+        }
+      }
+      
+      // Also check using validateRecord function
+      const validationErrors = validateRecord(record)
+      validationErrors.forEach(err => {
+        if (!errors.includes(err.message)) {
+          errors.push(err.message)
+        }
+      })
+      
+      return {
+        recordIndex: index,
+        recordId: record.visitorId || `record-${index}`,
+        visitorName: record.visitorName || '不明',
+        errors
+      }
+    }).filter(item => item.errors.length > 0)
+  }, [state.data.dailyAccounts, selectedMonth])
 
   // Calculate sales metrics
   const salesMetrics = useMemo(() => {
@@ -169,6 +237,8 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
 
       </div>
 
+     
+
       {/* Debug Info */}
       <div className="p-4 mb-6 rounded-lg bg-yellow-50">
         <h3 className="mb-2 text-sm font-medium text-yellow-900">デバッグ情報</h3>
@@ -179,6 +249,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
           <p>• 選択月: {selectedMonth || '未選択'}</p>
           <p>• 選択院: {state.selectedClinic}</p>
           <p>• 利用可能月: {availableMonths.join(', ')}</p>
+          <p>• エラー件数: {recordErrors.length}件</p>
         </div>
       </div>
 
@@ -189,13 +260,13 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
 
       {/* Additional Visual Analytics */}
       {salesMetrics && (
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 mt-6 lg:grid-cols-2">
           {/* Monthly Trend Chart */}
-          <div className="p-6 bg-white rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">月次トレンド</h3>
-            <div className="h-64 flex items-center justify-center bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+          <div className="p-6 bg-white border rounded-lg shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">月次トレンド</h3>
+            <div className="flex items-center justify-center h-64 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
               <div className="text-center">
-                <TrendingUp className="w-12 h-12 mx-auto text-blue-500 mb-2" />
+                <TrendingUp className="w-12 h-12 mx-auto mb-2 text-blue-500" />
                 <p className="text-gray-600">月次売上推移グラフ</p>
                 <p className="text-sm text-gray-500">過去12ヶ月のデータを表示</p>
               </div>
@@ -203,10 +274,10 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
           </div>
 
           {/* Category Performance */}
-          <div className="p-6 bg-white rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">カテゴリー別パフォーマンス</h3>
+          <div className="p-6 bg-white border rounded-lg shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別パフォーマンス</h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-red-50">
                 <div className="flex items-center space-x-3">
                   <div className="w-4 h-4 bg-red-500 rounded"></div>
                   <span className="font-medium text-gray-900">外科</span>
@@ -221,7 +292,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50">
                 <div className="flex items-center space-x-3">
                   <div className="w-4 h-4 bg-blue-500 rounded"></div>
                   <span className="font-medium text-gray-900">皮膚科</span>
@@ -236,7 +307,7 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-green-50">
                 <div className="flex items-center space-x-3">
                   <div className="w-4 h-4 bg-green-500 rounded"></div>
                   <span className="font-medium text-gray-900">脱毛</span>
@@ -262,74 +333,74 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                     区分
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">
                     売上
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">
                     件数
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">
                     単価
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                     新規
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.new.sales)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatNumber(salesMetrics.new.count)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.new.unitPrice)}
                   </td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                     既存
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.existing.sales)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatNumber(salesMetrics.existing.count)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.existing.unitPrice)}
                   </td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                     その他
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.other.sales)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatNumber(salesMetrics.other.count)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.other.unitPrice)}
                   </td>
                 </tr>
                 <tr className="bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900 whitespace-nowrap">
                     合計
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm font-bold text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.total.sales)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm font-bold text-right text-gray-900 whitespace-nowrap">
                     {formatNumber(salesMetrics.total.count)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
+                  <td className="px-6 py-4 text-sm font-bold text-right text-gray-900 whitespace-nowrap">
                     {formatCurrency(salesMetrics.total.unitPrice)}
                   </td>
                 </tr>
@@ -338,8 +409,8 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
           </div>
         </div>
       ) : (
-        <div className="text-center py-12">
-          <Table className="mx-auto h-12 w-12 text-gray-400" />
+        <div className="py-12 text-center">
+          <Table className="w-12 h-12 mx-auto text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">データがありません</h3>
           <p className="mt-1 text-sm text-gray-500">
             対象月を選択してデータを表示してください。

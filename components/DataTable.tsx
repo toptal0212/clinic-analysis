@@ -2,6 +2,14 @@
 
 import { useState, useMemo } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
+import { 
+  shouldExcludeRecord, 
+  isConsultationRoom, 
+  isConsultationOnly, 
+  isConsultationToTreatment,
+  validateRecord,
+  getCategoryFromConsultation
+} from '@/lib/consultationMapping'
 
 interface DataTableProps {
   data?: any[]
@@ -15,9 +23,43 @@ export default function DataTable({ data }: DataTableProps) {
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [itemsPerPage] = useState<number>(10)
 
+  // Filter and process records (exclude age 0, handle consultations)
+  const processedRecords = useMemo(() => {
+    if (!state.apiConnected || !state.data.dailyAccounts.length) {
+      return []
+    }
+
+    return state.data.dailyAccounts.filter(record => {
+      // Exclude records with age 0 (cancelled appointments, meetings, etc.)
+      if (shouldExcludeRecord(record)) {
+        return false
+      }
+      
+      // For consultation rooms, check if accounting exists
+      if (isConsultationRoom(record.roomName)) {
+        // Consultation rooms are always consultations
+        return true
+      }
+      
+      // For other rooms, check if accounting exists
+      // If accounting exists, it's a consultation→treatment
+      // If accounting doesn't exist, it's not a consultation (don't count)
+      const hasAccounting = (record.totalWithTax || 0) > 0 || 
+                           (Array.isArray(record.paymentItems) && record.paymentItems.length > 0 && 
+                            record.paymentItems.some((item: any) => (item.priceWithTax || 0) > 0))
+      
+      if (hasAccounting) {
+        return true
+      }
+      
+      // If no accounting and not a consultation room, exclude
+      return false
+    })
+  }, [state.apiConnected, state.data.dailyAccounts])
+
   // Generate monthly summary data from daily accounts API
   const monthlyData = useMemo(() => {
-    if (!state.apiConnected || !state.data.dailyAccounts.length) {
+    if (processedRecords.length === 0) {
       return []
     }
 
@@ -27,8 +69,10 @@ export default function DataTable({ data }: DataTableProps) {
       records: any[]
     }>()
 
-    state.data.dailyAccounts.forEach(record => {
-      const recordDate = new Date(record.recordDate)
+    processedRecords.forEach(record => {
+      const recordDate = new Date(record.recordDate || record.visitDate || record.accountingDate)
+      if (isNaN(recordDate.getTime())) return
+      
       const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`
       const periodLabel = recordDate.toLocaleDateString('ja-JP', { month: 'short', year: '2-digit' })
       
@@ -70,7 +114,7 @@ export default function DataTable({ data }: DataTableProps) {
         // Sort by periodKey (YYYY-MM format) for accurate date sorting
         return a.periodKey.localeCompare(b.periodKey)
       })
-  }, [state.apiConnected, state.data.dailyAccounts])
+  }, [processedRecords])
 
   // Apply sorting to table data
   const sortedData = useMemo(() => {
@@ -112,7 +156,7 @@ export default function DataTable({ data }: DataTableProps) {
 
   // Sort patients and accounting data
   const sortedPatientsData = useMemo(() => {
-    const patients = state.data.dailyAccounts || []
+    const patients = processedRecords || []
     if (!sortField || viewMode !== 'patients') return patients
 
     return [...patients].sort((a, b) => {
@@ -151,10 +195,10 @@ export default function DataTable({ data }: DataTableProps) {
       
       return 0
     })
-  }, [state.data.dailyAccounts, sortField, sortDirection, viewMode])
+  }, [processedRecords, sortField, sortDirection, viewMode])
 
   const sortedAccountingData = useMemo(() => {
-    const accounting = state.data.dailyAccounts || []
+    const accounting = processedRecords || []
     if (!sortField || viewMode !== 'accounting') return accounting
 
     return [...accounting].sort((a, b) => {
@@ -408,79 +452,81 @@ export default function DataTable({ data }: DataTableProps) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  来院者ID
-                </th>
-                <th 
-                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('clinicName')}
-                >
-                  院 {getSortIcon('clinicName')}
+                  予約ID
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
                   氏名
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  年齢
+                  キャンセル有無
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  性別
-                </th>
-                <th 
-                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('recordDate')}
-                >
-                  来院日 {getSortIcon('recordDate')}
+                  施術カテゴリー
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  初診/再診
+                  施術名
                 </th>
                 <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                  流入元
+                  部屋名
                 </th>
-                <th 
-                  className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('totalWithTax')}
-                >
-                  売上 {getSortIcon('totalWithTax')}
+                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
+                  エラー
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {state.apiConnected && paginatedData.length > 0 ? (
-                paginatedData.map((record, index) => (
-                  <tr key={record.visitorId || index} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                      {record.visitorId || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {record.clinicName || 'その他'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {record.visitorName || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {record.visitorAge || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {record.visitorGender || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {new Date(record.recordDate).toLocaleDateString('ja-JP')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {record.isFirst ? '初診' : '再診'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {record.visitorInflowSourceName || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                      {formatCurrency(record.totalWithTax || 0)}
-                    </td>
-                  </tr>
-                ))
+                paginatedData.map((record, index) => {
+                  const errors = validateRecord(record)
+                  const hasErrors = errors.length > 0
+                  const treatmentCategory = record.paymentItems?.[0]?.category || record.treatmentCategory || 'N/A'
+                  const treatmentName = record.paymentItems?.[0]?.name || record.treatmentName || 'N/A'
+                  const roomName = record.roomName || 'N/A'
+                  const isCancelled = record.cancelPriceWithTax > 0 || record.isCancelled
+                  
+                  return (
+                    <tr key={record.visitorId || index} className={`hover:bg-gray-50 ${hasErrors ? 'bg-red-50' : ''}`}>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+                        {record.reservationId || record.visitorId || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {record.visitorName || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {isCancelled ? (
+                          <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded">キャンセル</span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">正常</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {treatmentCategory}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {treatmentName}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {roomName}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {hasErrors ? (
+                          <div className="space-y-1">
+                            {errors.map((err, errIdx) => (
+                              <div key={errIdx} className="text-xs text-red-600">
+                                {err.message}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-green-600">✓</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 text-sm text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-4 text-sm text-center text-gray-500">
                     {state.apiConnected ? 'データがありません' : 'データ接続が必要です'}
                   </td>
                 </tr>
