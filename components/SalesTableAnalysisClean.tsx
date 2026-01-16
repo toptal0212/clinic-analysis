@@ -2,27 +2,29 @@
 
 import React, { useMemo, useState, useEffect } from 'react'
 import { useDashboard } from '@/contexts/DashboardContext'
-import { 
-  DollarSign, 
-  Users, 
-  TrendingUp, 
-  Calendar,
-  Table,
-  CheckCircle,
-  AlertCircle
-} from 'lucide-react'
-import SalesCharts from './SalesCharts'
-import { 
-  validateRecord, 
-  getCategoryFromConsultation,
-  CONSULTATION_MAPPINGS
-} from '@/lib/consultationMapping'
 
 interface SalesTableAnalysisProps {
   dateRange: { start: Date, end: Date }
 }
 
-export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProps) {
+interface RecordRow {
+  id: string
+  recordDate: string
+  clinicName: string
+  visitorName: string
+  age: string
+  staffName: string
+  treatmentCategory: string
+  treatmentName: string
+  amount: number
+  paymentMethod: string
+  referralSource: string
+  reservationRoute: string
+  notes: string
+  status: string
+}
+
+export default function SalesTableAnalysisClean({ dateRange }: SalesTableAnalysisProps) {
   const { state } = useDashboard()
   
   // Extract available months from data
@@ -31,7 +33,6 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
     
     const months = new Set<string>()
     state.data.dailyAccounts.forEach(record => {
-      // Try multiple date fields
       const visitDate = record.visitDate || record.recordDate || record.accountingDate
       if (visitDate) {
         const date = new Date(visitDate)
@@ -42,10 +43,12 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
       }
     })
     
-    return Array.from(months).sort().reverse() // Newest first
+    return Array.from(months).sort().reverse()
   }, [state.data.dailyAccounts])
   
   const [selectedMonth, setSelectedMonth] = useState<string>(availableMonths[0] || '')
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [selectedClinic, setSelectedClinic] = useState<string>('all')
   
   // Update selected month when available months change
   useEffect(() => {
@@ -54,9 +57,22 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
     }
   }, [availableMonths, selectedMonth])
 
+  // Get unique clinics
+  const availableClinics = useMemo(() => {
+    if (!state.data.dailyAccounts?.length) return []
+    
+    const clinics = new Set<string>()
+    state.data.dailyAccounts.forEach(record => {
+      if (record.clinicName) {
+        clinics.add(record.clinicName)
+      }
+    })
+    
+    return Array.from(clinics).sort()
+  }, [state.data.dailyAccounts])
 
-  // Detect errors in records (missing required fields and uncategorized treatments)
-  const recordErrors = useMemo(() => {
+  // Process records into table rows
+  const tableRows = useMemo((): RecordRow[] => {
     if (!state.data.dailyAccounts?.length || !selectedMonth) return []
     
     const targetMonthData = state.data.dailyAccounts.filter(record => {
@@ -67,133 +83,71 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
       if (isNaN(date.getTime())) return false
       
       const recordMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      return recordMonth === selectedMonth
+      if (recordMonth !== selectedMonth) return false
+      
+      // Filter by clinic
+      if (selectedClinic !== 'all' && record.clinicName !== selectedClinic) return false
+      
+      // Filter by search term
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase()
+        const visitorName = (record.visitorName || '').toLowerCase()
+        const treatmentName = (record.treatmentName || '').toLowerCase()
+        const staffName = (record.staffName || '').toLowerCase()
+        
+        if (!visitorName.includes(searchLower) && 
+            !treatmentName.includes(searchLower) && 
+            !staffName.includes(searchLower)) {
+          return false
+        }
+      }
+      
+      return true
     })
 
     return targetMonthData.map((record, index) => {
-      const errors: string[] = []
-      
-      // Check for missing referral source (知ったきっかけ)
-      if (!record.visitorInflowSourceName && !record.visitorInflowSourceLabel) {
-        errors.push('知ったきっかけが入力されていません')
-      }
-      
-      // Check for missing reservation route (来院経路)
-      if (!record.reservationInflowPathLabel && !record.reservationRoute) {
-        errors.push('来院経路が入力されていません')
-      }
-      
-      // Check for uncategorized treatments using consultation mapping
-      const consultationName = record.treatmentName || record.treatmentCategory || ''
-      if (consultationName && consultationName.includes('ご相談')) {
-        const mapping = getCategoryFromConsultation(consultationName)
-        if (!mapping) {
-          errors.push('どの分類にも属さない施術が登録されました')
-        }
-      }
-      
-      // Also check using validateRecord function
-      const validationErrors = validateRecord(record)
-      validationErrors.forEach(err => {
-        if (!errors.includes(err.message)) {
-          errors.push(err.message)
-        }
-      })
-      
-      return {
-        recordIndex: index,
-        recordId: record.visitorId || `record-${index}`,
-        visitorName: record.visitorName || '不明',
-        errors
-      }
-    }).filter(item => item.errors.length > 0)
-  }, [state.data.dailyAccounts, selectedMonth])
-
-  // Calculate sales metrics
-  const salesMetrics = useMemo(() => {
-    if (!state.data.dailyAccounts?.length || !selectedMonth) return null
-
-    const targetMonthData = state.data.dailyAccounts.filter(record => {
       const visitDate = record.visitDate || record.recordDate || record.accountingDate
-      if (!visitDate) return false
-      
-      const date = new Date(visitDate)
-      if (isNaN(date.getTime())) return false
-      
-      const recordMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      return recordMonth === selectedMonth
-    })
+      const date = visitDate ? new Date(visitDate) : null
+      const dateStr = date && !isNaN(date.getTime()) 
+        ? `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
+        : '-'
 
-    // Calculate metrics based on business rules
-    const newPatients = targetMonthData.filter(record => {
-      const isFirstVisit = record.isFirst || record.visitorKarteNumber?.includes('NEW') || record.karteTags?.includes('新規')
-      const isNewPatient = record.visitorInflowSourceName?.includes('新規') || record.reservationInflowPathLabel?.includes('新規')
-      return isFirstVisit || isNewPatient
-    })
-
-    const existingPatients = targetMonthData.filter(record => {
-      const isExisting = record.visitorInflowSourceName?.includes('既存') || 
-                        record.reservationInflowPathLabel?.includes('既存') ||
-                        record.karteTags?.includes('既存') ||
-                        (!record.isFirst && !record.visitorInflowSourceName?.includes('新規'))
-      return isExisting
-    })
-
-    const otherPatients = targetMonthData.filter(record => {
-      const isOther = record.paymentTags?.includes('物販') || 
-                     record.paymentTags?.includes('ピアス') ||
-                     record.paymentTags?.includes('麻酔') ||
-                     record.paymentTags?.includes('針') ||
-                     record.paymentTags?.includes('パック') ||
-                     record.visitorName?.includes('物販') ||
-                     record.visitorName?.includes('ピアス')
-      return isOther
-    })
-
-    const newSales = newPatients.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-    const existingSales = existingPatients.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-    const otherSales = otherPatients.reduce((sum, record) => sum + (record.totalWithTax || 0), 0)
-    const totalSales = newSales + existingSales + otherSales
-
-    const newCount = newPatients.length
-    const existingCount = existingPatients.length
-    const otherCount = otherPatients.length
-    const totalCount = newCount + existingCount + otherCount
-
-    return {
-      new: {
-        sales: newSales,
-        count: newCount,
-        unitPrice: newCount > 0 ? newSales / newCount : 0,
-        sameDayUnitPrice: 0,
-        crossMonthSales: 0,
-        crossMonthUnitPrice: 0
-      },
-      existing: {
-        sales: existingSales,
-        count: existingCount,
-        unitPrice: existingCount > 0 ? existingSales / existingCount : 0,
-        sameDayUnitPrice: 0,
-        crossMonthSales: 0,
-        crossMonthUnitPrice: 0
-      },
-      other: {
-        sales: otherSales,
-        count: otherCount,
-        unitPrice: otherCount > 0 ? otherSales / otherCount : 0,
-        sameDayUnitPrice: 0
-      },
-      total: {
-        sales: totalSales,
-        count: totalCount,
-        unitPrice: totalCount > 0 ? totalSales / totalCount : 0,
-        patientCount: new Set(targetMonthData.map(r => r.visitorId)).size,
-        visitBasedSales: totalSales,
-        paymentBasedSales: totalSales,
-        sameDayUnitPrice: 0
+      // Calculate age
+      let age = '-'
+      if (record.visitorBirthDate) {
+        const birthDate = new Date(record.visitorBirthDate)
+        if (!isNaN(birthDate.getTime()) && date) {
+          const ageYears = Math.floor((date.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+          age = `${ageYears}歳`
+        }
       }
-    }
-  }, [state.data.dailyAccounts, selectedMonth])
+
+      // Determine status
+      let status = '通常'
+      if (record.isFirst === true || record.isFirstVisit === true) {
+        status = '初来'
+      } else if (record.paymentTags?.includes('物販') || record.visitorName?.includes('物販')) {
+        status = '物販'
+      }
+
+      return {
+        id: record.visitorId || `record-${index}`,
+        recordDate: dateStr,
+        clinicName: record.clinicName || '未設定',
+        visitorName: record.visitorName || '不明',
+        age,
+        staffName: record.staffName || record.doctorName || '-',
+        treatmentCategory: record.treatmentCategory || '-',
+        treatmentName: record.treatmentName || '-',
+        amount: record.totalWithTax || 0,
+        paymentMethod: record.paymentMethod || '-',
+        referralSource: record.visitorInflowSourceName || record.visitorInflowSourceLabel || '-',
+        reservationRoute: record.reservationInflowPathLabel || record.reservationRoute || '-',
+        notes: record.notes || record.memo || '',
+        status
+      }
+    })
+  }, [state.data.dailyAccounts, selectedMonth, selectedClinic, searchTerm])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -204,216 +158,157 @@ export default function SalesTableAnalysis({ dateRange }: SalesTableAnalysisProp
     }).format(amount)
   }
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('ja-JP').format(num)
-  }
+  // Calculate summary
+  const summary = useMemo(() => {
+    const total = tableRows.reduce((sum, row) => sum + row.amount, 0)
+    const count = tableRows.length
+    const avgAmount = count > 0 ? total / count : 0
+    
+    return {
+      total,
+      count,
+      avgAmount
+    }
+  }, [tableRows])
 
   return (
-    <div className="p-6">
+    <div className="p-6 bg-gray-50">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="mb-2 text-2xl font-bold text-gray-900">売上表分析</h2>
-        <p className="text-gray-600">売上・件数・単価の詳細分析（ビジネスルール準拠）</p>
+      <div className="mb-4">
+        <h2 className="text-2xl font-bold text-gray-900">売上表</h2>
       </div>
 
-      {/* Controls */}
-      <div className="mb-6 space-y-4">
-        {/* Month Selection */}
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">対象月:</label>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">月を選択してください</option>
-            {availableMonths.map(month => (
-              <option key={month} value={month}>
-                {month.replace('-', '年')}月
-              </option>
-            ))}
-          </select>
+      {/* Filters */}
+      <div className="p-4 mb-4 bg-white border rounded-lg shadow-sm">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">院:</label>
+            <select
+              value={selectedClinic}
+              onChange={(e) => setSelectedClinic(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">すべて</option>
+              {availableClinics.map(clinic => (
+                <option key={clinic} value={clinic}>{clinic}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">月:</label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">月を選択してください</option>
+              {availableMonths.map(month => (
+                <option key={month} value={month}>
+                  {month.replace('-', '年')}月
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">検索:</label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="名前、施術、スタッフ"
+              className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
-
       </div>
 
-     
-
-      {/* Debug Info */}
-      <div className="p-4 mb-6 rounded-lg bg-yellow-50">
-        <h3 className="mb-2 text-sm font-medium text-yellow-900">デバッグ情報</h3>
-        <div className="space-y-1 text-xs text-yellow-800">
-          <p>• API接続状態: {state.apiConnected ? '接続済み' : '未接続'}</p>
-          <p>• 日次会計データ数: {state.data.dailyAccounts?.length || 0}</p>
-          <p>• クリニックデータ: {state.data.clinicData ? 'あり' : 'なし'}</p>
-          <p>• 選択月: {selectedMonth || '未選択'}</p>
-          <p>• 選択院: {state.selectedClinic}</p>
-          <p>• 利用可能月: {availableMonths.join(', ')}</p>
-          <p>• エラー件数: {recordErrors.length}件</p>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-3">
+        <div className="p-4 bg-white border rounded-lg shadow-sm">
+          <div className="text-sm text-gray-600">合計売上</div>
+          <div className="text-2xl font-bold text-blue-600">{formatCurrency(summary.total)}</div>
+        </div>
+        <div className="p-4 bg-white border rounded-lg shadow-sm">
+          <div className="text-sm text-gray-600">件数</div>
+          <div className="text-2xl font-bold text-green-600">{summary.count}件</div>
+        </div>
+        <div className="p-4 bg-white border rounded-lg shadow-sm">
+          <div className="text-sm text-gray-600">平均単価</div>
+          <div className="text-2xl font-bold text-purple-600">{formatCurrency(summary.avgAmount)}</div>
         </div>
       </div>
 
-      {/* Visual Charts */}
-      {salesMetrics && (
-        <SalesCharts salesMetrics={salesMetrics} selectedMonth={selectedMonth} />
-      )}
-
-      {/* Additional Visual Analytics */}
-      {salesMetrics && (
-        <div className="grid grid-cols-1 gap-6 mt-6 lg:grid-cols-2">
-          {/* Monthly Trend Chart */}
-          <div className="p-6 bg-white border rounded-lg shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">月次トレンド</h3>
-            <div className="flex items-center justify-center h-64 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
-              <div className="text-center">
-                <TrendingUp className="w-12 h-12 mx-auto mb-2 text-blue-500" />
-                <p className="text-gray-600">月次売上推移グラフ</p>
-                <p className="text-sm text-gray-500">過去12ヶ月のデータを表示</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Performance */}
-          <div className="p-6 bg-white border rounded-lg shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">カテゴリー別パフォーマンス</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-red-50">
-                <div className="flex items-center space-x-3">
-                  <div className="w-4 h-4 bg-red-500 rounded"></div>
-                  <span className="font-medium text-gray-900">外科</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-red-600">
-                    {formatCurrency(salesMetrics.new.sales + salesMetrics.existing.sales)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {formatNumber(salesMetrics.new.count + salesMetrics.existing.count)}件
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50">
-                <div className="flex items-center space-x-3">
-                  <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                  <span className="font-medium text-gray-900">皮膚科</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-blue-600">
-                    {formatCurrency(salesMetrics.other.sales)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {formatNumber(salesMetrics.other.count)}件
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg bg-green-50">
-                <div className="flex items-center space-x-3">
-                  <div className="w-4 h-4 bg-green-500 rounded"></div>
-                  <span className="font-medium text-gray-900">脱毛</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-green-600">
-                    {formatCurrency(salesMetrics.total.visitBasedSales * 0.1)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {formatNumber(Math.floor(salesMetrics.total.patientCount * 0.1))}件
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sales Table */}
-      {salesMetrics ? (
-        <div className="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                    区分
-                  </th>
-                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">
-                    売上
-                  </th>
-                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">
-                    件数
-                  </th>
-                  <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">
-                    単価
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                <tr>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                    新規
+      {/* Main Table */}
+      {tableRows.length > 0 ? (
+        <div className="overflow-x-auto bg-white border rounded-lg shadow-sm">
+          <table className="min-w-full border-collapse text-xs">
+            <thead>
+              <tr className="bg-blue-100 border-b">
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">日付</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">院</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">状態</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">名前</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">年齢</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">担当者</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">カテゴリー</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">施術名</th>
+                <th className="px-3 py-2 text-right border-r border-gray-300 font-medium text-gray-900">金額</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">支払方法</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">知ったきっかけ</th>
+                <th className="px-3 py-2 text-left border-r border-gray-300 font-medium text-gray-900">予約経路</th>
+                <th className="px-3 py-2 text-left border-gray-300 font-medium text-gray-900">備考</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((row, index) => (
+                <tr 
+                  key={row.id} 
+                  className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 border-b`}
+                >
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap">{row.recordDate}</td>
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap">{row.clinicName}</td>
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-[10px] rounded ${
+                      row.status === '初来' ? 'bg-green-100 text-green-800' :
+                      row.status === '物販' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {row.status}
+                    </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.new.sales)}
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap font-medium">{row.visitorName}</td>
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap text-center">{row.age}</td>
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap">{row.staffName}</td>
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap">{row.treatmentCategory}</td>
+                  <td className="px-3 py-2 border-r border-gray-300">{row.treatmentName}</td>
+                  <td className="px-3 py-2 border-r border-gray-300 text-right font-medium whitespace-nowrap">
+                    {formatCurrency(row.amount)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatNumber(salesMetrics.new.count)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.new.unitPrice)}
+                  <td className="px-3 py-2 border-r border-gray-300 whitespace-nowrap">{row.paymentMethod}</td>
+                  <td className="px-3 py-2 border-r border-gray-300">{row.referralSource}</td>
+                  <td className="px-3 py-2 border-r border-gray-300">{row.reservationRoute}</td>
+                  <td className="px-3 py-2 border-gray-300 text-gray-600 text-[10px]">
+                    {row.notes ? row.notes.substring(0, 50) + (row.notes.length > 50 ? '...' : '') : '-'}
                   </td>
                 </tr>
-                <tr>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                    既存
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.existing.sales)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatNumber(salesMetrics.existing.count)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.existing.unitPrice)}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                    その他
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.other.sales)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatNumber(salesMetrics.other.count)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.other.unitPrice)}
-                  </td>
-                </tr>
-                <tr className="bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-bold text-gray-900 whitespace-nowrap">
-                    合計
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.total.sales)}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-right text-gray-900 whitespace-nowrap">
-                    {formatNumber(salesMetrics.total.count)}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-right text-gray-900 whitespace-nowrap">
-                    {formatCurrency(salesMetrics.total.unitPrice)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-blue-200 border-t-2 border-gray-400 font-bold">
+                <td colSpan={8} className="px-3 py-2 text-right border-r border-gray-300">合計:</td>
+                <td className="px-3 py-2 text-right border-r border-gray-300">{formatCurrency(summary.total)}</td>
+                <td colSpan={4} className="px-3 py-2 text-left border-gray-300">
+                  {summary.count}件 / 平均: {formatCurrency(summary.avgAmount)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       ) : (
-        <div className="py-12 text-center">
-          <Table className="w-12 h-12 mx-auto text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">データがありません</h3>
+        <div className="py-12 text-center bg-white border rounded-lg">
+          <p className="text-lg text-gray-600">データがありません</p>
           <p className="mt-1 text-sm text-gray-500">
-            対象月を選択してデータを表示してください。
+            フィルター条件を変更してください
           </p>
         </div>
       )}

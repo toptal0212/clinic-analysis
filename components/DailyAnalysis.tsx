@@ -211,12 +211,17 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 bg-gray-50">
+      {/* Header */}
+      <div className="mb-4">
+        <h2 className="text-2xl font-bold text-gray-900">集計（日別）</h2>
+      </div>
+
       {/* Filters */}
-      <div className="p-4 bg-white border rounded-lg shadow-sm">
+      <div className="p-4 mb-4 bg-white border rounded-lg shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label htmlFor="clinic-select" className="text-sm font-medium text-gray-700">院:</label>
+            <label htmlFor="clinic-select" className="text-sm font-medium text-gray-700">大宮院</label>
             <select
               id="clinic-select"
               value={selectedClinic}
@@ -233,116 +238,124 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label htmlFor="month-select" className="text-sm font-medium text-gray-700">月:</label>
-            <select
-              id="month-select"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {(() => {
-                const options = []
-                const now = new Date()
-                for (let i = 11; i >= 0; i--) {
-                  const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-                  const value = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}`
-                  options.push(
-                    <option key={value} value={value}>{value}</option>
-                  )
-                }
-                return options
-              })()}
-            </select>
+            <input
+              type="text"
+              value={selectedMonth.replace('/', '年') + '月'}
+              readOnly
+              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md w-32"
+            />
+            <button className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+              移行
+            </button>
           </div>
-          <button className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
-            使用
-          </button>
         </div>
       </div>
 
-      {/* Entity Blocks - Horizontal Scroll */}
-      <div className="overflow-x-auto">
-        <div className="flex gap-4 min-w-max pb-4">
-          {entityData.map((entity, idx) => (
-            <div key={idx} className="flex-shrink-0 w-80 p-4 bg-white border rounded-lg shadow-sm">
-              {/* Header */}
-              <div className="mb-3">
-                <h3 className="text-base font-semibold text-gray-900">{entity.name}</h3>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-gray-600">日別売上</span>
-                </div>
-              </div>
-
-              {/* Overall Summary */}
-              <div className="mb-3 p-2 bg-gray-50 rounded-md">
-                <div className="text-xs font-semibold text-gray-700 mb-1.5">全体</div>
-                <div className="space-y-0.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">目標:</span>
-                    <span className="font-medium">{formatCurrency(entity.target)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">実績:</span>
-                    <span className="font-medium">{formatCurrency(entity.totalRevenue)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">目標達成額(日):</span>
-                    <span className="font-medium">
-                      {formatCurrency(entity.achievementDaily)}
-                      {entity.achievementDaily >= entity.dailyTarget && (
-                        <span className="ml-1 text-green-600">達成</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Daily Breakdown */}
-              <div className="mb-3">
-                <div className="text-xs font-semibold text-gray-700 mb-1.5">
-                  1日 - {daysInMonth}日 / -日
-                </div>
-                <div className="grid grid-cols-6 gap-0.5 text-[10px] max-h-48 overflow-y-auto">
-                  {Array.from({ length: Math.min(30, daysInMonth) }, (_, i) => i + 1).map(day => (
-                    <div key={day} className="p-0.5 text-center border border-gray-200 rounded">
-                      <div className="text-gray-500 text-[9px]">{day}</div>
-                      <div className="font-medium text-gray-900 text-[9px] leading-tight">
-                        {entity.dailySales[day] > 0 
-                          ? (entity.dailySales[day] / 10000).toFixed(0) + '万'
-                          : '-'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Mid-Month Summary */}
-              <div className="mb-3 p-2 bg-gray-50 rounded-md">
-                <div className="text-xs font-semibold text-gray-700 mb-1.5">月後半(16-末日)</div>
-                <div className="space-y-0.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">目標:</span>
-                    <span className="font-medium">{formatCurrency(entity.secondHalfTarget)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">実績:</span>
-                    <span className="font-medium">{formatCurrency(entity.secondHalfRevenue)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">目標達成額(日):</span>
-                    <span className="font-medium">
-                      {formatCurrency(entity.secondHalfAchievementDaily)}
-                      {entity.secondHalfAchievementDaily >= (entity.secondHalfTarget / (daysInMonth - 15)) && (
-                        <span className="ml-1 text-green-600">達成</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          ))}
-        </div>
+      {/* Main Table - Horizontal Scroll for Multiple Entities */}
+      <div className="overflow-x-auto bg-white border rounded-lg shadow-sm">
+        <table className="min-w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-blue-100 border-b">
+              <th className="sticky left-0 z-10 px-2 py-2 text-center bg-blue-100 border-r border-gray-300 font-medium text-gray-900" rowSpan={3}>
+                
+              </th>
+              {entityData.map((entity, idx) => (
+                <th 
+                  key={idx} 
+                  className="px-3 py-2 text-center bg-blue-200 border-r border-gray-300 font-semibold text-gray-900 min-w-[180px]"
+                  colSpan={3}
+                >
+                  {entity.name}
+                </th>
+              ))}
+            </tr>
+            <tr className="bg-blue-50 border-b">
+              {entityData.map((entity, idx) => (
+                <React.Fragment key={idx}>
+                  <th className="px-2 py-1 text-center bg-yellow-50 border-r border-gray-300 font-medium text-gray-700">目標</th>
+                  <th className="px-2 py-1 text-center bg-yellow-50 border-r border-gray-300 font-medium text-gray-700">実績・予約</th>
+                  <th className="px-2 py-1 text-center bg-yellow-50 border-r border-gray-300 font-medium text-gray-700">既存割合</th>
+                </React.Fragment>
+              ))}
+            </tr>
+            <tr className="bg-blue-50 border-b">
+              {entityData.map((entity, idx) => (
+                <React.Fragment key={idx}>
+                  <th className="px-2 py-1 text-right bg-white border-r border-gray-300 text-[10px] text-gray-600">
+                    {(entity.target / 10000).toFixed(0)}万
+                  </th>
+                  <th className="px-2 py-1 text-right bg-white border-r border-gray-300 text-[10px] text-gray-600">
+                    {(entity.totalRevenue / 10000).toFixed(0)}万
+                  </th>
+                  <th className="px-2 py-1 text-right bg-white border-r border-gray-300 text-[10px] text-gray-600">
+                    {entity.existingRatio.toFixed(0)}%
+                  </th>
+                </React.Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
+              <tr key={day} className={day % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                <td className="sticky left-0 z-10 px-3 py-1 text-center font-medium text-gray-900 bg-blue-100 border-r border-b border-gray-300">
+                  {day}日
+                </td>
+                {entityData.map((entity, idx) => {
+                  const dailyAmount = entity.dailySales[day] || 0
+                  const dailyTarget = entity.dailyTarget
+                  const achievementRate = dailyTarget > 0 ? (dailyAmount / dailyTarget) * 100 : 0
+                  const bgColor = dailyAmount === 0 ? 'bg-white' : 
+                                achievementRate >= 100 ? 'bg-green-50' : 
+                                achievementRate >= 80 ? 'bg-yellow-50' : 'bg-orange-50'
+                  
+                  return (
+                    <React.Fragment key={idx}>
+                      <td className={`px-2 py-1 text-right border-r border-b border-gray-300 ${bgColor}`}>
+                        <div className="text-[10px] text-gray-600">
+                          {(dailyTarget / 10000).toFixed(0)}万
+                        </div>
+                      </td>
+                      <td className={`px-2 py-1 text-right border-r border-b border-gray-300 ${bgColor}`}>
+                        <div className="font-medium text-gray-900">
+                          {dailyAmount > 0 ? (dailyAmount / 10000).toFixed(0) + '万' : '-'}
+                        </div>
+                        {dailyAmount > 0 && (
+                          <div className="text-[9px] text-gray-500">
+                            {achievementRate.toFixed(0)}%
+                          </div>
+                        )}
+                      </td>
+                      <td className={`px-2 py-1 text-center border-r border-b border-gray-300 ${bgColor}`}>
+                        <div className="text-[10px] text-gray-600">
+                          全体
+                        </div>
+                      </td>
+                    </React.Fragment>
+                  )
+                })}
+              </tr>
+            ))}
+            {/* Summary Row */}
+            <tr className="bg-blue-100 border-t-2 border-gray-400 font-bold">
+              <td className="sticky left-0 z-10 px-3 py-2 text-center text-gray-900 bg-blue-100 border-r border-gray-300">
+                合計
+              </td>
+              {entityData.map((entity, idx) => (
+                <React.Fragment key={idx}>
+                  <td className="px-2 py-2 text-right bg-blue-100 border-r border-gray-300">
+                    {(entity.target / 10000).toFixed(0)}万
+                  </td>
+                  <td className="px-2 py-2 text-right bg-blue-100 border-r border-gray-300">
+                    {(entity.totalRevenue / 10000).toFixed(0)}万
+                  </td>
+                  <td className="px-2 py-2 text-right bg-blue-100 border-r border-gray-300">
+                    {entity.existingRatio.toFixed(0)}%
+                  </td>
+                </React.Fragment>
+              ))}
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   )
