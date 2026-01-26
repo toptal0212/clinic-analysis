@@ -8,7 +8,6 @@ export function middleware(request: NextRequest) {
 
   // Skip authentication if credentials are not configured
   if (!basicAuthUser || !basicAuthPassword) {
-    console.warn('Basic auth credentials not configured');
     return NextResponse.next();
   }
 
@@ -26,13 +25,23 @@ export function middleware(request: NextRequest) {
   }
 
   // Parse the authorization header
-  const auth = authHeader.split(' ')[1];
-  const [user, password] = Buffer.from(auth, 'base64').toString().split(':');
+  try {
+    const auth = authHeader.split(' ')[1];
+    const [user, password] = Buffer.from(auth, 'base64').toString().split(':');
 
-  // Verify credentials
-  if (user === basicAuthUser && password === basicAuthPassword) {
-    // Authentication successful, continue to the requested page
-    return NextResponse.next();
+    // Verify credentials
+    if (user === basicAuthUser && password === basicAuthPassword) {
+      // Authentication successful - create response and allow it to pass through
+      const response = NextResponse.next();
+      
+      // Add cache headers to prevent re-authentication on every request
+      response.headers.set('Cache-Control', 'no-store');
+      
+      return response;
+    }
+  } catch (error) {
+    // Invalid authorization header format
+    console.error('Basic auth error:', error);
   }
 
   // Authentication failed
@@ -45,7 +54,7 @@ export function middleware(request: NextRequest) {
 }
 
 // Configure which routes to protect
-// This will protect all routes
+// This will protect all routes except static assets
 export const config = {
   matcher: [
     /*
@@ -53,8 +62,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public folder assets
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|_next/webpack-hmr|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
 
