@@ -1,22 +1,21 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // Get credentials from environment variables
-  const basicAuthUser = process.env.BASIC_AUTH_USER;
-  const basicAuthPassword = process.env.BASIC_AUTH_PASSWORD;
+  // Get auth credentials from environment
+  const authUser = process.env.BASIC_AUTH_USER;
+  const authPassword = process.env.BASIC_AUTH_PASSWORD;
 
-  // Skip authentication if credentials are not configured
-  if (!basicAuthUser || !basicAuthPassword) {
+  // Skip if auth not configured
+  if (!authUser || !authPassword) {
     return NextResponse.next();
   }
 
-  // Get the authorization header
+  // Check for authorization header
   const authHeader = request.headers.get('authorization');
 
-  // If no authorization header is present, request authentication
   if (!authHeader) {
-    return new NextResponse('Authentication required', {
+    // No auth provided - challenge
+    return new NextResponse('Auth required', {
       status: 401,
       headers: {
         'WWW-Authenticate': 'Basic realm="Secure Area"',
@@ -24,27 +23,28 @@ export function middleware(request: NextRequest) {
     });
   }
 
-  // Parse the authorization header
-  try {
-    const auth = authHeader.split(' ')[1];
-    const [user, password] = Buffer.from(auth, 'base64').toString().split(':');
-
-    // Verify credentials
-    if (user === basicAuthUser && password === basicAuthPassword) {
-      // Authentication successful - create response and allow it to pass through
-      const response = NextResponse.next();
-      
-      // Add cache headers to prevent re-authentication on every request
-      response.headers.set('Cache-Control', 'no-store');
-      
-      return response;
-    }
-  } catch (error) {
-    // Invalid authorization header format
-    console.error('Basic auth error:', error);
+  // Validate credentials
+  const [scheme, encoded] = authHeader.split(' ');
+  
+  if (scheme !== 'Basic' || !encoded) {
+    return new NextResponse('Invalid auth', {
+      status: 401,
+      headers: {
+        'WWW-Authenticate': 'Basic realm="Secure Area"',
+      },
+    });
   }
 
-  // Authentication failed
+  const buffer = Buffer.from(encoded, 'base64');
+  const decoded = buffer.toString('utf-8');
+  const [username, password] = decoded.split(':');
+
+  if (username === authUser && password === authPassword) {
+    // Auth successful
+    return NextResponse.next();
+  }
+
+  // Auth failed
   return new NextResponse('Invalid credentials', {
     status: 401,
     headers: {
@@ -53,18 +53,6 @@ export function middleware(request: NextRequest) {
   });
 }
 
-// Configure which routes to protect
-// This will protect all routes except static assets
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder assets
-     */
-    '/((?!_next/static|_next/image|_next/webpack-hmr|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
-  ],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
-
