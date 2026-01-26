@@ -10,6 +10,14 @@ const CLINIC_NAME_MAP: Record<string, string> = {
   omiya: '大宮院'
 }
 
+const CLINIC_OPTIONS = [
+  { id: 'all', name: '全院' },
+  { id: 'omiya', name: '大宮院' },
+  { id: 'yokohama', name: '横浜院' },
+  { id: 'mito', name: '水戸院' },
+  { id: 'koriyama', name: '郡山院' }
+]
+
 interface ClinicAggregation {
   clinicName: string
   categories: {
@@ -30,9 +38,14 @@ interface ClinicAggregation {
 
 export default function ClinicSales() {
   const { state } = useDashboard()
+  const [selectedClinic, setSelectedClinic] = useState<string>('all')
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [inputMonth, setInputMonth] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
 
   // Parse selected month
@@ -41,17 +54,25 @@ export default function ClinicSales() {
     return [year, month]
   }, [selectedMonth])
 
-  // Get all daily accounts
+  // Get all daily accounts filtered by clinic
   const allData = useMemo(() => {
     const all: any[] = []
-    if (state.data.dailyAccounts?.length) all.push(...state.data.dailyAccounts)
-    if (state.data.clinicData) {
-      Object.values(state.data.clinicData).forEach((c: any) => {
-        if (c?.dailyAccounts?.length) all.push(...c.dailyAccounts)
-      })
+    
+    if (selectedClinic === 'all') {
+      // Show all clinics data
+      if (state.data.dailyAccounts?.length) {
+        all.push(...state.data.dailyAccounts)
+      }
+    } else {
+      // Show specific clinic data
+      const clinicData = state.data.clinicData?.[selectedClinic as keyof typeof state.data.clinicData]
+      if (clinicData?.dailyAccounts?.length) {
+        all.push(...clinicData.dailyAccounts)
+      }
     }
+    
     return all
-  }, [state.data.dailyAccounts, state.data.clinicData])
+  }, [state.data.dailyAccounts, state.data.clinicData, selectedClinic])
 
   // Helper to parse date
   const parseDate = (record: any): Date | null => {
@@ -115,8 +136,16 @@ export default function ClinicSales() {
       return date.getFullYear() === selectedYear && date.getMonth() + 1 === selectedMonthNum
     })
 
+    // If a specific clinic is selected, only show that clinic
+    // If 'all' is selected, show all clinics separately
     monthData.forEach((record: any) => {
-      const clinicName = record.clinicName || CLINIC_NAME_MAP[record.clinicId as keyof typeof CLINIC_NAME_MAP] || '未設定'
+      let clinicName = record.clinicName || CLINIC_NAME_MAP[record.clinicId as keyof typeof CLINIC_NAME_MAP] || '未設定'
+      
+      // If a specific clinic is selected, use that clinic's name
+      if (selectedClinic !== 'all') {
+        const selectedClinicOption = CLINIC_OPTIONS.find(c => c.id === selectedClinic)
+        clinicName = selectedClinicOption?.name || clinicName
+      }
       
       if (!clinicMap.has(clinicName)) {
         clinicMap.set(clinicName, {
@@ -164,7 +193,7 @@ export default function ClinicSales() {
     })
 
     return Array.from(clinicMap.values())
-  }, [allData, selectedYear, selectedMonthNum])
+  }, [allData, selectedYear, selectedMonthNum, selectedClinic])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -177,6 +206,14 @@ export default function ClinicSales() {
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ja-JP').format(num)
+  }
+
+  // Handle month update
+  const handleUpdateMonth = () => {
+    if (inputMonth) {
+      const [year, month] = inputMonth.split('-')
+      setSelectedMonth(`${year}/${month}`)
+    }
   }
 
   if (!state.apiConnected || allData.length === 0) {
@@ -224,22 +261,30 @@ export default function ClinicSales() {
       <div className="p-4 mb-4 bg-white border rounded-lg shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">大宮院</label>
-            <select className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md">
-              <option>大宮院</option>
-              <option>横浜院</option>
-              <option>水戸院</option>
-              <option>郡山院</option>
+            <label className="text-sm font-medium text-gray-700">病院</label>
+            <select 
+              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md"
+              value={selectedClinic}
+              onChange={(e) => setSelectedClinic(e.target.value)}
+            >
+              {CLINIC_OPTIONS.map((clinic) => (
+                <option key={clinic.id} value={clinic.id}>
+                  {clinic.name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-2">
             <input
-              type="text"
-              value={selectedMonth.replace('/', '年') + '月'}
-              readOnly
-              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md w-32"
+              type="month"
+              value={inputMonth}
+              onChange={(e) => setInputMonth(e.target.value)}
+              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md"
             />
-            <button className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+            <button 
+              onClick={handleUpdateMonth}
+              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+            >
               更新
             </button>
           </div>
@@ -248,32 +293,32 @@ export default function ClinicSales() {
 
       {/* Main Aggregation Table */}
       <div className="overflow-x-auto bg-white border rounded-lg shadow-sm">
-        <table className="min-w-full border-collapse text-xs">
+        <table className="min-w-full text-xs border-collapse">
           <thead>
             <tr className="bg-blue-100 border-b">
-              <th className="px-3 py-2 text-center border-r border-gray-300 font-medium text-gray-900" rowSpan={2}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 border-r border-gray-300" rowSpan={2}>
                 施設
               </th>
-              <th className="px-3 py-2 text-center border-r border-gray-300 font-medium text-gray-900" rowSpan={2}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 border-r border-gray-300" rowSpan={2}>
                 状態
               </th>
-              <th className="px-3 py-2 text-center bg-red-100 border-r border-gray-300 font-medium text-gray-900" colSpan={3}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 bg-red-100 border-r border-gray-300" colSpan={3}>
                 外科
               </th>
-              <th className="px-3 py-2 text-center bg-blue-100 border-r border-gray-300 font-medium text-gray-900" colSpan={3}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 bg-blue-100 border-r border-gray-300" colSpan={3}>
                 皮膚科
               </th>
-              <th className="px-3 py-2 text-center bg-green-100 border-r border-gray-300 font-medium text-gray-900" colSpan={3}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 bg-green-100 border-r border-gray-300" colSpan={3}>
                 脱毛
               </th>
-              <th className="px-3 py-2 text-center bg-yellow-100 border-r border-gray-300 font-medium text-gray-900" colSpan={3}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 bg-yellow-100 border-r border-gray-300" colSpan={3}>
                 その他
               </th>
-              <th className="px-3 py-2 text-center bg-purple-100 border-r border-gray-300 font-medium text-gray-900" colSpan={2}>
+              <th className="px-3 py-2 font-medium text-center text-gray-900 bg-purple-100 border-r border-gray-300" colSpan={2}>
                 合計
               </th>
             </tr>
-            <tr className="bg-blue-50 border-b">
+            <tr className="border-b bg-blue-50">
               {/* Surgery */}
               <th className="px-2 py-1 text-center bg-red-50 border-r border-gray-300 text-[10px] text-gray-700">売上</th>
               <th className="px-2 py-1 text-center bg-red-50 border-r border-gray-300 text-[10px] text-gray-700">件数</th>
@@ -310,68 +355,68 @@ export default function ClinicSales() {
                     <tr key={`${idx}-${statusIdx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       {statusIdx === 0 && (
                         <td 
-                          className="px-3 py-2 text-center font-medium text-gray-900 bg-blue-50 border-r border-b border-gray-300" 
+                          className="px-3 py-2 font-medium text-center text-gray-900 border-b border-r border-gray-300 bg-blue-50" 
                           rowSpan={4}
                         >
                           {clinic.clinicName}
                         </td>
                       )}
-                      <td className="px-3 py-2 text-left text-gray-700 border-r border-b border-gray-300">
+                      <td className="px-3 py-2 text-left text-gray-700 border-b border-r border-gray-300">
                         {statusRow.label}
                       </td>
                       {/* Surgery */}
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-red-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-red-50">
                         {clinic.categories.surgery.amount > 0 ? formatCurrency(clinic.categories.surgery.amount) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-red-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-red-50">
                         {clinic.categories.surgery.count > 0 ? formatNumber(clinic.categories.surgery.count) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-red-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-red-50">
                         {clinic.categories.surgery.count > 0 
                           ? formatCurrency(clinic.categories.surgery.amount / clinic.categories.surgery.count) 
                           : '-'}
                       </td>
                       {/* Dermatology */}
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-blue-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-blue-50">
                         {clinic.categories.dermatology.amount > 0 ? formatCurrency(clinic.categories.dermatology.amount) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-blue-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-blue-50">
                         {clinic.categories.dermatology.count > 0 ? formatNumber(clinic.categories.dermatology.count) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-blue-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-blue-50">
                         {clinic.categories.dermatology.count > 0 
                           ? formatCurrency(clinic.categories.dermatology.amount / clinic.categories.dermatology.count) 
                           : '-'}
                       </td>
                       {/* Hair Removal */}
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-green-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-green-50">
                         {clinic.categories.hairRemoval.amount > 0 ? formatCurrency(clinic.categories.hairRemoval.amount) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-green-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-green-50">
                         {clinic.categories.hairRemoval.count > 0 ? formatNumber(clinic.categories.hairRemoval.count) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-green-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-green-50">
                         {clinic.categories.hairRemoval.count > 0 
                           ? formatCurrency(clinic.categories.hairRemoval.amount / clinic.categories.hairRemoval.count) 
                           : '-'}
                       </td>
                       {/* Other */}
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-yellow-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-yellow-50">
                         {clinic.categories.other.amount > 0 ? formatCurrency(clinic.categories.other.amount) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-yellow-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-yellow-50">
                         {clinic.categories.other.count > 0 ? formatNumber(clinic.categories.other.count) : '-'}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-yellow-50">
+                      <td className="px-2 py-1 text-right border-b border-r border-gray-300 bg-yellow-50">
                         {clinic.categories.other.count > 0 
                           ? formatCurrency(clinic.categories.other.amount / clinic.categories.other.count) 
                           : '-'}
                       </td>
                       {/* Total */}
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-purple-50 font-medium">
+                      <td className="px-2 py-1 font-medium text-right border-b border-r border-gray-300 bg-purple-50">
                         {formatCurrency(clinic.totalAmount)}
                       </td>
-                      <td className="px-2 py-1 text-right border-r border-b border-gray-300 bg-purple-50 font-medium">
+                      <td className="px-2 py-1 font-medium text-right border-b border-r border-gray-300 bg-purple-50">
                         {formatNumber(clinic.totalCount)}
                       </td>
                     </tr>
@@ -380,63 +425,63 @@ export default function ClinicSales() {
               )
             })}
             {/* Grand Total Row */}
-            <tr className="bg-blue-200 border-t-2 border-gray-400 font-bold">
+            <tr className="font-bold bg-blue-200 border-t-2 border-gray-400">
               <td className="px-3 py-2 text-center text-gray-900 border-r border-gray-300" colSpan={2}>
                 合計
               </td>
               {/* Surgery */}
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-red-100">
+              <td className="px-2 py-2 text-right bg-red-100 border-r border-gray-300">
                 {formatCurrency(grandTotals.categories.surgery.amount)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-red-100">
+              <td className="px-2 py-2 text-right bg-red-100 border-r border-gray-300">
                 {formatNumber(grandTotals.categories.surgery.count)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-red-100">
+              <td className="px-2 py-2 text-right bg-red-100 border-r border-gray-300">
                 {grandTotals.categories.surgery.count > 0
                   ? formatCurrency(grandTotals.categories.surgery.amount / grandTotals.categories.surgery.count)
                   : '-'}
               </td>
               {/* Dermatology */}
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-blue-100">
+              <td className="px-2 py-2 text-right bg-blue-100 border-r border-gray-300">
                 {formatCurrency(grandTotals.categories.dermatology.amount)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-blue-100">
+              <td className="px-2 py-2 text-right bg-blue-100 border-r border-gray-300">
                 {formatNumber(grandTotals.categories.dermatology.count)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-blue-100">
+              <td className="px-2 py-2 text-right bg-blue-100 border-r border-gray-300">
                 {grandTotals.categories.dermatology.count > 0
                   ? formatCurrency(grandTotals.categories.dermatology.amount / grandTotals.categories.dermatology.count)
                   : '-'}
               </td>
               {/* Hair Removal */}
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-green-100">
+              <td className="px-2 py-2 text-right bg-green-100 border-r border-gray-300">
                 {formatCurrency(grandTotals.categories.hairRemoval.amount)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-green-100">
+              <td className="px-2 py-2 text-right bg-green-100 border-r border-gray-300">
                 {formatNumber(grandTotals.categories.hairRemoval.count)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-green-100">
+              <td className="px-2 py-2 text-right bg-green-100 border-r border-gray-300">
                 {grandTotals.categories.hairRemoval.count > 0
                   ? formatCurrency(grandTotals.categories.hairRemoval.amount / grandTotals.categories.hairRemoval.count)
                   : '-'}
               </td>
               {/* Other */}
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-yellow-100">
+              <td className="px-2 py-2 text-right bg-yellow-100 border-r border-gray-300">
                 {formatCurrency(grandTotals.categories.other.amount)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-yellow-100">
+              <td className="px-2 py-2 text-right bg-yellow-100 border-r border-gray-300">
                 {formatNumber(grandTotals.categories.other.count)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-yellow-100">
+              <td className="px-2 py-2 text-right bg-yellow-100 border-r border-gray-300">
                 {grandTotals.categories.other.count > 0
                   ? formatCurrency(grandTotals.categories.other.amount / grandTotals.categories.other.count)
                   : '-'}
               </td>
               {/* Total */}
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-purple-100">
+              <td className="px-2 py-2 text-right bg-purple-100 border-r border-gray-300">
                 {formatCurrency(grandTotals.totalAmount)}
               </td>
-              <td className="px-2 py-2 text-right border-r border-gray-300 bg-purple-100">
+              <td className="px-2 py-2 text-right bg-purple-100 border-r border-gray-300">
                 {formatNumber(grandTotals.totalCount)}
               </td>
             </tr>

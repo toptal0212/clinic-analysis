@@ -221,14 +221,13 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
       <div className="p-4 mb-4 bg-white border rounded-lg shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label htmlFor="clinic-select" className="text-sm font-medium text-gray-700">大宮院</label>
             <select
               id="clinic-select"
               value={selectedClinic}
               onChange={(e) => setSelectedClinic(e.target.value)}
               className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">すべて</option>
+              <option value="all">全体</option>
               {entities.clinics.map(clinic => (
                 <option key={clinic} value={clinic}>{clinic}</option>
               ))}
@@ -239,12 +238,21 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
           </div>
           <div className="flex items-center gap-2">
             <input
-              type="text"
-              value={selectedMonth.replace('/', '年') + '月'}
-              readOnly
-              className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md w-32"
+              type="month"
+              value={selectedMonth.replace('/', '-')}
+              onChange={(e) => {
+                const [year, month] = e.target.value.split('-')
+                setSelectedMonth(`${year}/${month}`)
+              }}
+              className="w-40 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <button 
+              onClick={() => {
+                // Refresh data with selected month
+                setSelectedMonth(selectedMonth)
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
               移行
             </button>
           </div>
@@ -253,10 +261,10 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
 
       {/* Main Table - Horizontal Scroll for Multiple Entities */}
       <div className="overflow-x-auto bg-white border rounded-lg shadow-sm">
-        <table className="min-w-full border-collapse text-xs">
+        <table className="min-w-full text-xs border-collapse">
           <thead>
             <tr className="bg-blue-100 border-b">
-              <th className="sticky left-0 z-10 px-2 py-2 text-center bg-blue-100 border-r border-gray-300 font-medium text-gray-900" rowSpan={3}>
+              <th className="sticky left-0 z-10 px-2 py-2 font-medium text-center text-gray-900 bg-blue-100 border-r border-gray-300" rowSpan={3}>
                 
               </th>
               {entityData.map((entity, idx) => (
@@ -269,16 +277,16 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
                 </th>
               ))}
             </tr>
-            <tr className="bg-blue-50 border-b">
+            <tr className="border-b bg-blue-50">
               {entityData.map((entity, idx) => (
                 <React.Fragment key={idx}>
-                  <th className="px-2 py-1 text-center bg-yellow-50 border-r border-gray-300 font-medium text-gray-700">目標</th>
-                  <th className="px-2 py-1 text-center bg-yellow-50 border-r border-gray-300 font-medium text-gray-700">実績・予約</th>
-                  <th className="px-2 py-1 text-center bg-yellow-50 border-r border-gray-300 font-medium text-gray-700">既存割合</th>
+                  <th className="px-2 py-1 font-medium text-center text-gray-700 border-r border-gray-300 bg-yellow-50">目標</th>
+                  <th className="px-2 py-1 font-medium text-center text-gray-700 border-r border-gray-300 bg-yellow-50">実績・予約</th>
+                  <th className="px-2 py-1 font-medium text-center text-gray-700 border-r border-gray-300 bg-yellow-50">既存割合</th>
                 </React.Fragment>
               ))}
             </tr>
-            <tr className="bg-blue-50 border-b">
+            <tr className="border-b bg-blue-50">
               {entityData.map((entity, idx) => (
                 <React.Fragment key={idx}>
                   <th className="px-2 py-1 text-right bg-white border-r border-gray-300 text-[10px] text-gray-600">
@@ -297,7 +305,7 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
           <tbody>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
               <tr key={day} className={day % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                <td className="sticky left-0 z-10 px-3 py-1 text-center font-medium text-gray-900 bg-blue-100 border-r border-b border-gray-300">
+                <td className="sticky left-0 z-10 px-3 py-1 font-medium text-center text-gray-900 bg-blue-100 border-b border-r border-gray-300">
                   {day}日
                 </td>
                 {entityData.map((entity, idx) => {
@@ -336,7 +344,7 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
               </tr>
             ))}
             {/* Summary Row */}
-            <tr className="bg-blue-100 border-t-2 border-gray-400 font-bold">
+            <tr className="font-bold bg-blue-100 border-t-2 border-gray-400">
               <td className="sticky left-0 z-10 px-3 py-2 text-center text-gray-900 bg-blue-100 border-r border-gray-300">
                 合計
               </td>
