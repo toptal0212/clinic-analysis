@@ -84,6 +84,11 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
       const entityRecords = allData.filter((r: any) => {
         const d = toDate(r.recordDate || r.visitDate || r.treatmentDate || r.accountingDate)
         if (!d) return false
+        
+        // Apply date range filter from parent
+        if (d < dateRange.start || d > dateRange.end) return false
+        
+        // Apply selected month filter
         if (d.getFullYear() !== selectedYear || d.getMonth() + 1 !== selectedMonthNum) return false
         
         if (isClinic) {
@@ -185,7 +190,7 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
         overallCount
       }
     })
-  }, [allData, selectedClinic, selectedYear, selectedMonthNum, daysInMonth, goals, entities])
+  }, [allData, selectedClinic, selectedYear, selectedMonthNum, daysInMonth, goals, entities, dateRange])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -246,15 +251,6 @@ export default function DailyAnalysis({ dateRange }: DailyAnalysisProps) {
               }}
               className="w-40 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button 
-              onClick={() => {
-                // Refresh data with selected month
-                setSelectedMonth(selectedMonth)
-              }}
-              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              移行
-            </button>
           </div>
         </div>
       </div>
